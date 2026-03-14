@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CiviQ | Issue Board</title>
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Font Awesome -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    />
+  </head>
+
+  <body class="bg-slate-100 text-slate-800 font-sans">
+    <div class="flex min-h-screen">
+      <!-- ================= SIDEBAR ================= -->
+      <aside class="w-64 bg-slate-900 text-white flex flex-col p-6">
+        <div class="text-center mb-8">
+          <h1 class="text-2xl font-semibold tracking-wide">CiviQ</h1>
+          <p class="text-sm text-slate-400 mt-1">
+            Smart Community Issue Management
+          </p>
+        </div>
+
+        <nav class="flex-1">
+          <ul class="space-y-2">
+            <li>
+              <a
+                href="index.html"
+                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
+              >
+                <i class="fa-solid fa-gauge-high"></i>
+                <span>Dashboard</span>
+              </a>
+            </li>
+
+            <li>
+              <a
+                href="report.html"
+                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
+              >
+                <i class="fa-solid fa-file-circle-plus"></i>
+                <span>Report Issue</span>
+              </a>
+            </li>
+
+            <li>
+              <a
+                href="board.html"
+                class="flex items-center gap-3 px-4 py-2 rounded-lg bg-slate-800 text-sky-400"
+              >
+                <i class="fa-solid fa-layer-group"></i>
+                <span>Issue Board</span>
+              </a>
+            </li>
+
+            <li>
+              <a
+                href="analytics.html"
+                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
+              >
+                <i class="fa-solid fa-chart-column"></i>
+                <span>Analytics</span>
+              </a>
+            </li>
+
+            <li class="authority-only">
+              <a
+                href="#"
+                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
+              >
+                <i class="fa-solid fa-user-shield"></i>
+                <span>Authority Panel</span>
+              </a>
+            </li>
+
+            <li class="admin-only">
+              <a
+                href="#"
+                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
+              >
+                <i class="fa-solid fa-users-gear"></i>
+                <span>Admin Control</span>
+              </a>
+            </li>
+
+            <li>
+              <a
+                href="#"
+                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-red-500 hover:text-white transition"
+              >
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span>Logout</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+
+      <!-- ================= MAIN CONTENT ================= -->
+      <main class="flex-1 p-8">
+        <!-- TOPBAR -->
+        <header class="flex justify-between items-center mb-8">
+          <div>
+            <h2 class="text-2xl font-semibold">Issue Board</h2>
+            <p class="text-sm text-slate-500 mt-1">Track community issues</p>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <span class="text-sm font-medium">Role: User</span>
+            <select
+              class="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
+            >
+              <option>User</option>
+              <option>Authority</option>
+              <option>Admin</option>
+            </select>
+          </div>
+        </header>
+
+        <!-- ===== KANBAN BOARD ===== -->
+        <section class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <!-- Reported Column -->
+          <div class="bg-white p-4 rounded-xl shadow">
+            <h4 class="font-semibold text-lg mb-3">Reported</h4>
+            <div
+              class="bg-slate-100 p-3 rounded-lg mb-2 cursor-move"
+              draggable="true"
+            >
+              Water Leakage
+            </div>
+            <div
+              class="bg-slate-100 p-3 rounded-lg mb-2 cursor-move"
+              draggable="true"
+            >
+              Broken Street Light
+            </div>
+          </div>
+
+          <!-- In Progress Column -->
+          <div class="bg-white p-4 rounded-xl shadow">
+            <h4 class="font-semibold text-lg mb-3">In Progress</h4>
+            <div
+              class="bg-yellow-100 p-3 rounded-lg mb-2 cursor-move"
+              draggable="true"
+            >
+              Garbage Collection Delay
+            </div>
+          </div>
+
+          <!-- Resolved Column -->
+          <div class="bg-white p-4 rounded-xl shadow">
+            <h4 class="font-semibold text-lg mb-3">Resolved</h4>
+            <div
+              class="bg-green-100 p-3 rounded-lg mb-2 cursor-move"
+              draggable="true"
+            >
+              Pothole Filled
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
