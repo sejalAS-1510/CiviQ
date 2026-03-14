@@ -3,179 +3,105 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CiviQ | Dashboard</title>
-
-    <!-- Tailwind CDN -->
+    <title>CiviQ | Community Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Font Awesome -->
     <link
       rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
+    <link rel="stylesheet" href="../css/style.css" />
   </head>
+  <body class="bg-[#f3f2ed] text-[#2b2d42]">
+    <header
+      class="fixed top-0 left-0 right-0 h-16 bg-[#f3f2ed]/90 backdrop-blur-xl border-b border-[#dcdbd2] z-50 flex items-center justify-between px-8"
+    >
+      <div class="flex items-center gap-6">
+        <button
+          onclick="toggleSidebar()"
+          class="text-[#3f4234] hover:rotate-90 transition-transform duration-500"
+        >
+          <i class="fa-solid fa-plus text-xl"></i>
+        </button>
+        <span class="text-2xl font-serif italic tracking-tighter text-[#3f4234]"
+          >CiviQ</span
+        >
+      </div>
 
-  <body class="bg-slate-100 text-slate-800 font-sans">
-    <div class="flex min-h-screen">
-      <!-- ================= SIDEBAR ================= -->
-      <aside class="w-64 bg-slate-900 text-white flex flex-col p-6">
-        <div class="text-center mb-8">
-          <h1 class="text-2xl font-semibold tracking-wide">CiviQ</h1>
-          <p class="text-sm text-slate-400 mt-1">
-            Smart Community Issue Management
-          </p>
-        </div>
+      <div id="top-right-actions" class="flex items-center gap-4">
+        <button
+          id="loginBtn"
+          onclick="handleLogin()"
+          class="text-[10px] font-bold tracking-[0.2em] border border-[#3f4234] px-6 py-2 rounded-full hover:bg-[#3f4234] hover:text-white transition-all"
+        >
+          SIGN IN
+        </button>
+      </div>
+    </header>
 
-        <nav class="flex-1">
-          <ul class="space-y-2">
-            <li>
-              <a
-                href="index.html"
-                class="flex items-center gap-3 px-4 py-2 rounded-lg bg-slate-800 text-sky-400"
-              >
-                <i class="fa-solid fa-gauge-high"></i>
-                <span>Dashboard</span>
-              </a>
-            </li>
+    <aside
+      id="sidebar"
+      class="fixed top-16 left-0 w-64 h-[calc(100vh-64px)] bg-[#fdfcf9] border-r border-[#dcdbd2] transition-transform -translate-x-full z-40 flex flex-col p-6"
+    >
+      <nav class="flex-1 space-y-2">
+        <button
+          onclick="loadSection('dashboard')"
+          class="nav-item active w-full"
+        >
+          <i class="fa-solid fa-house"></i><span>Overview</span>
+        </button>
+        <button
+          id="nav-report"
+          onclick="loadSection('report')"
+          class="nav-item w-full"
+        >
+          <i class="fa-solid fa-feather"></i><span>Report Issue</span>
+        </button>
+        <button onclick="loadSection('board')" class="nav-item w-full">
+          <i class="fa-solid fa-clapperboard"></i><span>The Board</span>
+        </button>
+        <button
+          id="nav-analytics"
+          onclick="loadSection('analytics')"
+          class="nav-item hidden w-full"
+        >
+          <i class="fa-solid fa-chart-line"></i><span>Analytics</span>
+        </button>
+      </nav>
 
-            <li>
-              <a
-                href="report.html"
-                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
-              >
-                <i class="fa-solid fa-file-circle-plus"></i>
-                <span>Report Issue</span>
-              </a>
-            </li>
+      <div id="profile-section" class="pt-6 border-t border-[#dcdbd2] hidden">
+        <button
+          onclick="loadSection('profile')"
+          class="w-full flex items-center gap-3 p-4 hover:bg-[#e2e2da] rounded-[24px] transition-all group text-left"
+        >
+          <div
+            class="w-11 h-11 rounded-full bg-[#3f4234] flex items-center justify-center text-[#f3f2ed] font-serif italic text-lg shadow-sm group-hover:scale-105 transition-transform"
+          >
+            A
+          </div>
 
-            <li>
-              <a
-                href="board.html"
-                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
-              >
-                <i class="fa-solid fa-layer-group"></i>
-                <span>Issue Board</span>
-              </a>
-            </li>
-
-            <li>
-              <a
-                href="analytics.html"
-                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
-              >
-                <i class="fa-solid fa-chart-column"></i>
-                <span>Analytics</span>
-              </a>
-            </li>
-
-            <li class="authority-only">
-              <a
-                href="#"
-                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
-              >
-                <i class="fa-solid fa-user-shield"></i>
-                <span>Authority Panel</span>
-              </a>
-            </li>
-
-            <li class="admin-only">
-              <a
-                href="#"
-                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-slate-800 hover:text-sky-400 transition"
-              >
-                <i class="fa-solid fa-users-gear"></i>
-                <span>Admin Control</span>
-              </a>
-            </li>
-
-            <li>
-              <a
-                href="#"
-                class="flex items-center gap-3 px-4 py-2 rounded-lg hover:bg-red-500 hover:text-white transition"
-              >
-                <i class="fa-solid fa-right-from-bracket"></i>
-                <span>Logout</span>
-              </a>
-            </li>
-          </ul>
-        </nav>
-      </aside>
-
-      <!-- ================= MAIN CONTENT ================= -->
-      <main class="flex-1 p-8">
-        <!-- TOPBAR -->
-        <header class="flex justify-between items-center mb-8">
-          <div>
-            <h2 class="text-2xl font-semibold">Dashboard</h2>
-            <p class="text-sm text-slate-500 mt-1">
-              Smart Community Monitoring
+          <div class="overflow-hidden">
+            <p id="user-name" class="text-sm font-bold truncate text-[#2b2d42]">
+              Arjun Kumar
+            </p>
+            <p
+              id="user-role"
+              class="text-[10px] uppercase tracking-[0.15em] text-[#6b705c] font-semibold"
+            >
+              Resident
             </p>
           </div>
 
-          <div class="flex items-center gap-4">
-            <span class="text-sm font-medium">Role: User</span>
-            <select
-              class="px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
-            >
-              <option>User</option>
-              <option>Authority</option>
-              <option>Admin</option>
-            </select>
-          </div>
-        </header>
+          <i
+            class="fa-solid fa-gear ml-auto text-[#6b705c] opacity-30 group-hover:opacity-100 group-hover:rotate-90 transition-all"
+          ></i>
+        </button>
+      </div>
+    </aside>
 
-        <!-- ===== STAT CARDS ===== -->
-        <section class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          <article
-            class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition"
-          >
-            <h4 class="text-sm text-slate-500">Total Issues</h4>
-            <p class="text-3xl font-semibold mt-2">48</p>
-          </article>
+    <main id="main-content" class="pt-24 px-8 transition-all duration-300">
+      <div id="content-area" class="max-w-5xl mx-auto"></div>
+    </main>
 
-          <article
-            class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition"
-          >
-            <h4 class="text-sm text-slate-500">Resolved</h4>
-            <p class="text-3xl font-semibold mt-2 text-green-600">30</p>
-          </article>
-
-          <article
-            class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition"
-          >
-            <h4 class="text-sm text-slate-500">In Progress</h4>
-            <p class="text-3xl font-semibold mt-2 text-yellow-500">10</p>
-          </article>
-
-          <article
-            class="bg-white p-6 rounded-xl shadow hover:shadow-lg transition admin-only"
-          >
-            <h4 class="text-sm text-slate-500">Pending Approval</h4>
-            <p class="text-3xl font-semibold mt-2 text-red-500">8</p>
-          </article>
-        </section>
-
-        <!-- ===== PANELS ===== -->
-        <section class="grid gap-6 lg:grid-cols-2">
-          <article class="bg-white p-6 rounded-xl shadow">
-            <h4 class="font-semibold text-lg mb-3">Community Updates</h4>
-            <ul class="list-disc pl-5 text-slate-600 space-y-2">
-              <li>Water repair in Block A</li>
-              <li>Garbage pickup rescheduled</li>
-              <li>Street light maintenance planned</li>
-            </ul>
-          </article>
-
-          <article class="bg-white p-6 rounded-xl shadow admin-only">
-            <h4 class="font-semibold text-lg mb-3">Authority Actions</h4>
-            <ul class="list-disc pl-5 text-slate-600 space-y-2">
-              <li>5 unresolved complaints</li>
-              <li>3 issues awaiting assignment</li>
-              <li>Weekly report pending</li>
-            </ul>
-          </article>
-        </section>
-      </main>
-    </div>
+    <script src="../js/main.js"></script>
   </body>
 </html>
