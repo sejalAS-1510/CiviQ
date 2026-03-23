@@ -1,0 +1,40 @@
+import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { AppSidebar } from './AppSidebar';
+import { TopBar } from './TopBar';
+import { AuthModal } from '@/components/auth/AuthModal';
+import { RequireAuth } from '@/components/auth/RequireAuth';
+
+const protectedRoutes = ['/report', '/issues', '/notifications', '/settings'];
+
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+}
+
+export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const location = useLocation();
+
+  const isProtected = protectedRoutes.includes(location.pathname);
+
+  return (
+    <div className="bg-page-gradient">
+      <AppSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <TopBar
+        onMenuClick={() => setSidebarOpen(true)}
+        onAuthClick={() => setAuthOpen(true)} />
+      
+      <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto relative z-10 bg-[#99dbc3]">
+        {isProtected ?
+        <RequireAuth onAuthClick={() => setAuthOpen(true)}>
+            {children}
+          </RequireAuth> :
+
+        children
+        }
+      </main>
+      <AuthModal open={authOpen} onOpenChange={setAuthOpen} />
+    </div>);
+
+}
