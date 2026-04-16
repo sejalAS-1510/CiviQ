@@ -10,6 +10,7 @@ import MyIssues from "./pages/MyIssues.tsx";
 import Notifications from "./pages/Notifications.tsx";
 import SettingsPage from "./pages/Settings.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
 
 const queryClient = new QueryClient();
 
@@ -26,7 +27,9 @@ const App = () => (
             <Route path="/issues" element={<MyIssues />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="*" element={<NotFound />} />
+
           </Routes>
         </DashboardLayout>
       </BrowserRouter>

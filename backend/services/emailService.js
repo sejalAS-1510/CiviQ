@@ -539,11 +539,11 @@ exports.sendEmailWithAttachment = async (
         html: htmlContent,
         attachments: attachment
           ? [
-              {
-                filename: attachment.filename,
-                content: attachment.content,
-              },
-            ]
+            {
+              filename: attachment.filename,
+              content: attachment.content,
+            },
+          ]
           : [],
       },
       "attachment-mail",
@@ -769,3 +769,42 @@ function loginTemplate(data) {
     </div>
   `);
 }
+
+// ===== ADD THIS FUNCTION at the bottom of emailService.js =====
+
+exports.sendPasswordResetEmail = async (user, resetUrl) => {
+  const label = `password-reset-${user._id}`;
+  try {
+    await ensureTransportReady();
+
+    const html = baseCard(`
+      <div style="background:#dc2626;color:#fff;padding:18px 20px;font-size:18px;font-weight:600;">Password Reset Request</div>
+      <div style="padding:20px;">
+        <p>Hello ${user.name},</p>
+        <p>We received a request to reset your CiviQ account password.</p>
+        <p>Click the button below to set a new password. This link expires in <strong>30 minutes</strong>.</p>
+        <p style="text-align:center;margin:24px 0;">
+          <a href="${resetUrl}" 
+             style="background:#dc2626;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:600;display:inline-block;">
+            Reset My Password
+          </a>
+        </p>
+        <p style="color:#6b7280;font-size:13px;">If the button doesn't work, copy this link:<br/><a href="${resetUrl}">${resetUrl}</a></p>
+        <p style="color:#6b7280;font-size:13px;">If you did not request a password reset, please ignore this email. Your password will not change.</p>
+      </div>
+    `);
+
+    const mail = {
+      from: getFromAddress(),
+      to: user.email,
+      subject: "CiviQ – Reset Your Password",
+      html,
+    };
+
+    const result = await sendMailWithRetry(mail, label);
+    return result;
+  } catch (err) {
+    console.error(`[emailService] ${label} failed:`, err.message);
+    return { success: false, error: err.message };
+  }
+};

@@ -13,11 +13,19 @@ const {
   deleteUser,
 } = require("../controllers/userController");
 
+const {
+  forgotPassword,
+  resetPassword,
+} = require("../controllers/passwordResetController");
+
 const { protect, admin } = require("../middleware/authMiddleware");
 
 // Public routes
 router.post("/register", register);
 router.post("/login", login);
+
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 // Protected routes
 router.get("/profile", protect, getProfile);
