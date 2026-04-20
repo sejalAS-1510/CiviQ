@@ -33,38 +33,97 @@ exports.assignTechnician = async (complaint, options = {}) => {
       mapComplaintCategoryToSpecialization(normalizedCategory);
     const specializationCandidates =
       getSpecializationCandidates(targetSpecialization);
+    const normalizedCandidates = getCandidateVariants(specializationCandidates);
 
-    // Step 1: Find all active technicians with matching specialization
+    // Step 1: Find all active technicians with matching specialization and same ownerId
     const matchingTechnicians = await User.find({
       role: "technician",
       isActive: true,
       isAvailable: true,
+      ownerId: complaint.ownerId, // Only technicians from the same organization
       _id: { $nin: excludedTechnicianIds },
       $or: [
-        { specialization: { $in: specializationCandidates } },
-        { specializations: { $in: specializationCandidates } },
+        { specialization: { $in: normalizedCandidates } },
+        { specializations: { $in: normalizedCandidates } },
       ],
     });
 
     if (matchingTechnicians.length === 0) {
-      // Fallback: Get technicians from "General" specialization
-      const generalTechnicians = await User.find({
+      // --- CROSS-ORGANIZATION ASSIGNMENT (specialization) ---
+      const crossOrgTechnicians = await User.find({
         role: "technician",
         isActive: true,
         isAvailable: true,
+        ownerId: { $ne: complaint.ownerId },
         _id: { $nin: excludedTechnicianIds },
-        $or: [{ specialization: "General" }, { specializations: "General" }],
-      });
+        $or: [
+          { specialization: { $in: normalizedCandidates } },
+          { specializations: { $in: normalizedCandidates } },
+        ],
+      }).populate("ownerId", "name address");
 
-      if (generalTechnicians.length === 0) {
-        throw new Error(`No available technicians for category: ${category}`);
+      if (crossOrgTechnicians.length > 0) {
+        return await selectBestTechnician(
+          crossOrgTechnicians,
+          priority,
+          "cross-org-specialized",
+          targetSpecialization,
+        );
       }
 
-      return await selectBestTechnician(
-        generalTechnicians,
-        priority,
+      // Only allow 'General' specialization if complaint is for 'other'/'General'
+      const isGeneralCategory = [
+        "other",
         "general",
         "General",
+        "Other",
+      ].includes(normalizedCategory);
+      if (isGeneralCategory) {
+        // Try general specialization in current org
+        const generalTechnicians = await User.find({
+          role: "technician",
+          isActive: true,
+          isAvailable: true,
+          ownerId: complaint.ownerId,
+          _id: { $nin: excludedTechnicianIds },
+          $or: [
+            { specialization: { $in: getCandidateVariants(["General"]) } },
+            { specializations: { $in: getCandidateVariants(["General"]) } },
+          ],
+        });
+        if (generalTechnicians.length > 0) {
+          return await selectBestTechnician(
+            generalTechnicians,
+            priority,
+            "general",
+            "General",
+          );
+        }
+        // Try general specialization in other orgs
+        const crossOrgGeneral = await User.find({
+          role: "technician",
+          isActive: true,
+          isAvailable: true,
+          ownerId: { $ne: complaint.ownerId },
+          _id: { $nin: excludedTechnicianIds },
+          $or: [
+            { specialization: { $in: getCandidateVariants(["General"]) } },
+            { specializations: { $in: getCandidateVariants(["General"]) } },
+          ],
+        }).populate("ownerId", "name address");
+        if (crossOrgGeneral.length > 0) {
+          return await selectBestTechnician(
+            crossOrgGeneral,
+            priority,
+            "cross-org-general",
+            "General",
+          );
+        }
+      }
+
+      // No suitable technician found
+      throw new Error(
+        `No available technicians for category: ${category} in any organization`,
       );
     }
 
@@ -93,6 +152,22 @@ function getSpecializationCandidates(targetSpecialization) {
   };
 
   return map[targetSpecialization] || ["General"];
+}
+
+function getCandidateVariants(candidates = []) {
+  const values = new Set();
+
+  for (const item of candidates) {
+    const value = String(item || "").trim();
+    if (!value) continue;
+
+    values.add(value);
+    values.add(value.toLowerCase());
+    values.add(value.toUpperCase());
+    values.add(value.charAt(0).toUpperCase() + value.slice(1).toLowerCase());
+  }
+
+  return Array.from(values);
 }
 
 /**

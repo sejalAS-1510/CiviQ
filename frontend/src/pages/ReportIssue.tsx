@@ -28,10 +28,10 @@ const categories: { value: IssueCategory; label: string }[] = [
 ];
 
 const ReportIssue = () => {
-  const [category, setCategory] = useState<IssueCategory | "">("");
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [category, setCategory] = useState<IssueCategory | "">("");
   const [submitting, setSubmitting] = useState(false);
   const { addIssue } = useIssueStore();
   const { user, isAuthenticated } = useAuthStore();
@@ -53,6 +53,10 @@ const ReportIssue = () => {
       });
     }
   }, [isAuthenticated, user?.role]);
+
+  // Optional resident info for admin
+  const [residentName, setResidentName] = useState("");
+  const [residentEmail, setResidentEmail] = useState("");
 
   if (!isAuthenticated) {
     return (
@@ -112,18 +116,37 @@ const ReportIssue = () => {
     );
   }
 
+  // Optionally include resident info if admin
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!category || submitting) return;
 
     setSubmitting(true);
 
-    const result = await addIssue({
-      category,
+    if (!category) {
+      toast.error("Please select a category for your issue.");
+      return;
+    }
+    const issuePayload: {
+      category: IssueCategory;
+      description: string;
+      location: string;
+      imageFile?: File;
+      residentName?: string;
+      residentEmail?: string;
+    } = {
+      category: category as IssueCategory,
       description,
       location,
       imageFile: imageFile || undefined,
-    });
+    };
+    if (user?.role === "admin") {
+      if (residentName.trim()) issuePayload.residentName = residentName.trim();
+      if (residentEmail.trim())
+        issuePayload.residentEmail = residentEmail.trim();
+    }
+
+    const result = await addIssue(issuePayload);
 
     if (result.success) {
       toast.success("Issue reported successfully!", {
@@ -135,6 +158,8 @@ const ReportIssue = () => {
       setDescription("");
       setLocation("");
       setImageFile(null);
+      setResidentName("");
+      setResidentEmail("");
       navigate("/issues");
     } else {
       toast.error("Failed to report issue", {
@@ -159,7 +184,7 @@ const ReportIssue = () => {
           Help keep your community clean and safe by reporting issues.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+        <form onSubmit={handleSubmit}>
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -248,8 +273,32 @@ const ReportIssue = () => {
                 }}
               />
             </div>
+            {/* Optional resident info for admin */}
+            {user?.role === "admin" && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Resident Info (optional)
+                </Label>
+                <Input
+                  value={residentName}
+                  onChange={(e) => setResidentName(e.target.value)}
+                  placeholder="Resident Name (if reporting for someone)"
+                  className=""
+                />
+                <Input
+                  type="email"
+                  value={residentEmail}
+                  onChange={(e) => setResidentEmail(e.target.value)}
+                  placeholder="Resident Email (optional)"
+                  className=""
+                />
+                <p className="text-xs text-muted-foreground">
+                  If reporting on behalf of a resident, you may enter their name
+                  and email.
+                </p>
+              </div>
+            )}
           </motion.div>
-
           <Button
             type="submit"
             className="w-full gradient-primary text-primary-foreground shadow-sm hover:shadow-glow transition-shadow"

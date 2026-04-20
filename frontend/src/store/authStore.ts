@@ -1,5 +1,18 @@
 import { create } from "zustand";
 
+type UserPayload = {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  specialization?: string;
+  phone?: string;
+  address?: string;
+  token?: string;
+  avatar?: string;
+  ownerId?: string;
+};
+
 export type UserRole = "resident" | "technician" | "admin";
 export type TechnicianSpecialization =
   | "Plumbing"
@@ -19,6 +32,7 @@ export interface User {
   phone?: string;
   address?: string;
   avatar?: string;
+  ownerId?: string;
 }
 
 interface AuthState {
@@ -33,6 +47,7 @@ interface AuthState {
     password: string;
     role: UserRole;
     specialization?: TechnicianSpecialization;
+    ownerId?: string;
   }) => Promise<{ success: boolean; message: string }>;
   loginWithCredentials: (payload: {
     email: string;
@@ -44,6 +59,7 @@ interface AuthState {
     phone?: string;
     address?: string;
     password?: string;
+    avatar?: string;
   }) => Promise<{ success: boolean; message: string }>;
   deleteMyAccount: () => Promise<{ success: boolean; message: string }>;
   deleteUserByEmail: (email: string) => Promise<{
@@ -52,6 +68,7 @@ interface AuthState {
   }>;
   clearError: () => void;
   logout: () => void;
+  uploadAvatar: (file: File) => Promise<{ success: boolean; message: string }>;
 }
 
 const AUTH_STORAGE_KEY = "civiq_auth";
@@ -133,7 +150,13 @@ function clearPersistedAuth() {
   localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
-async function parseApiPayload(response: Response): Promise<any> {
+type ApiPayload = {
+  success?: boolean;
+  message?: string;
+  data?: unknown;
+  // [key: string]: any; // Removed index signature for type safety
+};
+async function parseApiPayload(response: Response): Promise<ApiPayload> {
   const text = await response.text();
   if (!text) return {};
   try {
@@ -151,7 +174,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: stored.isAuthenticated,
   loading: false,
   error: null,
-  signup: async ({ name, email, password, role, specialization }) => {
+  signup: async ({ name, email, password, role, specialization, ownerId }) => {
     set({ loading: true, error: null });
     try {
       const response = await fetch(`/api/users/register`, {
@@ -165,6 +188,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           password,
           role: toBackendRole(role),
           specialization,
+          ownerId,
         }),
       });
 
@@ -199,28 +223,29 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
 
       const payload = await parseApiPayload(response);
-      if (!response.ok || !payload?.success || !payload?.data?.token) {
+      const userData = payload?.data as UserPayload | undefined;
+      if (!response.ok || !payload?.success || !userData?.token) {
         const message = payload?.message || "Login failed";
         set({ loading: false, error: message });
         return { success: false, message };
       }
 
       const user: User = {
-        id: payload.data._id,
-        name: payload.data.name,
-        email: payload.data.email,
-        role: fromBackendRole(payload.data.role),
-        specialization: normalizeStoredSpecialization(
-          payload.data.specialization,
-        ),
-        phone: payload.data.phone,
-        address: payload.data.address,
+        id: userData._id,
+        name: userData.name,
+        email: userData.email,
+        role: fromBackendRole(userData.role),
+        specialization: normalizeStoredSpecialization(userData.specialization),
+        phone: userData.phone,
+        address: userData.address,
+        avatar: userData.avatar,
+        ownerId: userData.ownerId,
       };
 
-      persistAuth(user, payload.data.token);
+      persistAuth(user, userData.token);
       set({
         user,
-        token: payload.data.token,
+        token: userData.token,
         isAuthenticated: true,
         loading: false,
         error: null,
@@ -275,28 +300,31 @@ export const useAuthStore = create<AuthState>((set) => ({
         return { success: false, message };
       }
 
+      const updatedData = payload.data as UserPayload | undefined;
+      if (!updatedData) {
+        set({ loading: false, error: "Invalid response from server" });
+        return { success: false, message: "Invalid response from server" };
+      }
       const updatedUser: User = {
-        id: payload.data._id,
-        name: payload.data.name,
-        email: payload.data.email,
-        role: fromBackendRole(payload.data.role),
+        id: updatedData._id,
+        name: updatedData.name,
+        email: updatedData.email,
+        role: fromBackendRole(updatedData.role),
         specialization: normalizeStoredSpecialization(
-          payload.data.specialization,
+          updatedData.specialization,
         ),
-        phone: payload.data.phone,
-        address: payload.data.address,
+        phone: updatedData.phone,
+        address: updatedData.address,
+        avatar: updatedData.avatar,
       };
-
-      const nextToken = payload.data.token || token;
+      const nextToken = updatedData.token || token;
       persistAuth(updatedUser, nextToken);
-
       set({
         user: updatedUser,
         token: nextToken,
         loading: false,
         error: null,
       });
-
       return {
         success: true,
         message: payload?.message || "Profile updated successfully",
@@ -399,9 +427,11 @@ export const useAuthStore = create<AuthState>((set) => ({
         return { success: false, message };
       }
 
-      const targetUser = (usersPayload?.data || []).find(
-        (item: { email?: string; _id?: string }) =>
-          String(item?.email || "").toLowerCase() === normalizedEmail,
+      const usersArr = Array.isArray(usersPayload?.data)
+        ? (usersPayload.data as UserPayload[])
+        : [];
+      const targetUser = usersArr.find(
+        (item) => String(item?.email || "").toLowerCase() === normalizedEmail,
       );
 
       if (!targetUser?._id) {
@@ -440,5 +470,56 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     clearPersistedAuth();
     set({ user: null, token: null, isAuthenticated: false, error: null });
+  },
+  uploadAvatar: async (
+    file: File,
+  ): Promise<{ success: boolean; message: string }> => {
+    const { token, user } = useAuthStore.getState();
+    if (!token || !user) {
+      const message = "Please login again to upload avatar.";
+      set({ error: message });
+      return { success: false, message };
+    }
+    set({ loading: true, error: null });
+    try {
+      const formData = new FormData();
+      formData.append("avatar", file);
+      const response = await fetch(`/api/users/avatar`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      const payload = await parseApiPayload(response);
+      if (!response.ok || !payload?.success) {
+        const message = payload?.message || "Failed to upload avatar";
+        set({ loading: false, error: message });
+        return { success: false, message };
+      }
+      // Update user avatar in store
+      const avatarPayload = payload as { avatar?: string };
+      set((state) => ({
+        user:
+          state.user && typeof avatarPayload.avatar === "string"
+            ? { ...state.user, avatar: avatarPayload.avatar }
+            : state.user,
+        loading: false,
+        error: null,
+      }));
+      // Also update persisted auth
+      if (user && token) {
+        if (typeof avatarPayload.avatar === "string") {
+          persistAuth({ ...user, avatar: avatarPayload.avatar }, token);
+        } else {
+          persistAuth(user, token);
+        }
+      }
+      return { success: true, message: "Avatar uploaded successfully" };
+    } catch {
+      const message = "Unable to reach server for avatar upload.";
+      set({ loading: false, error: message });
+      return { success: false, message };
+    }
   },
 }));

@@ -101,6 +101,10 @@ const upload = multer({
 
 // Make uploads directory static
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(
+  "/uploads/avatars",
+  express.static(path.join(__dirname, "uploads", "avatars")),
+);
 
 // Serve the built frontend from the same origin when available
 if (fs.existsSync(frontendDistPath)) {
@@ -129,6 +133,8 @@ app.post("/test", (req, res) => {
 app.use("/api/users", userRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/notifications", notificationRoutes);
+const organizationRoutes = require("./routes/organizationRoutes");
+app.use("/api/organizations", organizationRoutes);
 
 // Single-URL fallback for the frontend SPA
 app.get(/^\/(?!api\/).*/, (req, res, next) => {

@@ -1,14 +1,19 @@
-import { Menu, LogIn, LogOut, Building2 } from 'lucide-react';
-import { useAuthStore } from '@/store/authStore';
-import { Button } from '@/components/ui/button';
-import { Link } from 'react-router-dom';
+import { Menu, LogIn, LogOut, Building2 } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 interface TopBarProps {
   onMenuClick: () => void;
-  onAuthClick: () => void;
+  onLoginClick: () => void;
+  onSignupClick: () => void;
 }
 
-export function TopBar({ onMenuClick, onAuthClick }: TopBarProps) {
+export function TopBar({
+  onMenuClick,
+  onLoginClick,
+  onSignupClick,
+}: TopBarProps) {
   const { isAuthenticated, user, logout } = useAuthStore();
 
   return (
@@ -54,7 +59,7 @@ export function TopBar({ onMenuClick, onAuthClick }: TopBarProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={onAuthClick}
+              onClick={onLoginClick}
               className="text-primary-foreground/80 hover:text-primary-foreground hover:bg-primary-foreground/10"
             >
               <LogIn className="h-4 w-4 mr-1.5" />
@@ -62,7 +67,7 @@ export function TopBar({ onMenuClick, onAuthClick }: TopBarProps) {
             </Button>
             <Button
               size="sm"
-              onClick={onAuthClick}
+              onClick={onSignupClick}
               className="bg-primary-foreground text-primary font-semibold hover:bg-primary-foreground/90 shadow-sm"
             >
               Sign Up

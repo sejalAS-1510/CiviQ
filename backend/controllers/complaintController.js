@@ -1,3 +1,51 @@
+// @desc    Get average rating for a technician
+// @route   GET /api/complaints/technicians/:id/average-rating
+// @access  Private (technician or admin)
+exports.getTechnicianAverageRating = async (req, res) => {
+  try {
+    const technicianId = req.params.id;
+    // Debug log for troubleshooting
+    console.log("[getTechnicianAverageRating] req.user:", req.user);
+    console.log("[getTechnicianAverageRating] technicianId:", technicianId);
+    // Only allow self or admin
+    if (req.user.role !== "admin" && req.user._id.toString() !== technicianId) {
+      console.warn("[getTechnicianAverageRating] Not authorized", {
+        userId: req.user._id,
+        userRole: req.user.role,
+        technicianId,
+      });
+      return res
+        .status(403)
+        .json({ success: false, message: "Not authorized" });
+    }
+    // Find all complaints assigned to this technician with at least one rating
+    const complaints = await require("../models/Complaint").find({
+      technician: technicianId,
+      $or: [
+        { "ratings.0": { $exists: true } },
+        { technicianRating: { $gte: 1 } }, // legacy
+      ],
+    });
+    // Gather all ratings from all complaints
+    let allRatings = [];
+    for (const c of complaints) {
+      if (Array.isArray(c.ratings) && c.ratings.length > 0) {
+        allRatings.push(...c.ratings.map((r) => r.rating));
+      } else if (c.technicianRating) {
+        allRatings.push(c.technicianRating);
+      }
+    }
+    if (!allRatings.length) {
+      return res.json({ success: true, averageRating: null, count: 0 });
+    }
+    const sum = allRatings.reduce((acc, r) => acc + r, 0);
+    const avg = sum / allRatings.length;
+    res.json({ success: true, averageRating: avg, count: allRatings.length });
+  } catch (error) {
+    console.error("Get technician average rating error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 const Complaint = require("../models/Complaint");
 const technicianAssigner = require("../services/technicianAssigner");
 const { classifyComplaint } = require("../services/categoryDetector");
@@ -64,7 +112,9 @@ exports.createComplaint = async (req, res) => {
       });
     }
 
+    // Extract required fields from request body
     const { description, location, category, priority, autoAssign } = req.body;
+
     const classification = classifyComplaint({
       description,
       category,
@@ -79,6 +129,7 @@ exports.createComplaint = async (req, res) => {
       classificationConfidence: classification.confidence,
       priority: priority || "Medium",
       userId: req.user._id, // Associate with logged-in user
+      ownerId: req.user.ownerId,
     };
 
     // Handle file upload if present
@@ -86,9 +137,35 @@ exports.createComplaint = async (req, res) => {
       complaintData.images = [`/uploads/issue-images/${req.file.filename}`];
     }
 
+    // If admin is reporting and provided resident info, save it
+    let residentUser = null;
+    if (req.user.role === "admin") {
+      if (req.body.residentName)
+        complaintData.residentName = req.body.residentName.trim();
+      if (req.body.residentEmail) {
+        complaintData.residentEmail = req.body.residentEmail
+          .trim()
+          .toLowerCase();
+        // Try to find a user with this email
+        residentUser = await require("../models/User").findOne({
+          email: complaintData.residentEmail,
+        });
+        console.log("[DEBUG] Resident user lookup:", {
+          inputEmail: complaintData.residentEmail,
+          found: !!residentUser,
+          residentUserId: residentUser?._id,
+          residentUserEmail: residentUser?.email,
+        });
+        if (residentUser) {
+          complaintData.userId = residentUser._id;
+        }
+      }
+    }
+
     const complaint = new Complaint(complaintData);
     await complaint.save();
 
+    // Notify the reporter (admin)
     triggerNotification(
       notificationService.createNotification({
         recipient: req.user._id,
@@ -100,6 +177,42 @@ exports.createComplaint = async (req, res) => {
         createdBy: req.user._id,
       }),
       `complaint-created-${complaint._id}`,
+    );
+    triggerNotification(
+      emailService.sendIssueSubmittedNotification(complaint, req.user),
+      `complaint-submitted-email-${complaint._id}`,
+    );
+
+    // If admin reported for a resident who is a registered user, notify the resident as well
+    if (residentUser) {
+      triggerNotification(
+        notificationService.createNotification({
+          recipient: residentUser._id,
+          title: "New issue reported on your behalf",
+          message: `An issue at ${location} has been reported for you by an administrator.`,
+          type: "info",
+          category: "complaint-created",
+          complaintId: complaint._id,
+          createdBy: req.user._id,
+        }),
+        `complaint-created-resident-${complaint._id}`,
+      );
+      emailService
+        .sendIssueSubmittedNotification(complaint, residentUser)
+        .then((result) => {
+          console.log(
+            "[DEBUG] Email notification result for resident:",
+            result,
+          );
+        })
+        .catch((err) => {
+          console.error("[ERROR] Email notification failed for resident:", err);
+        });
+    }
+
+    triggerNotification(
+      emailService.sendIssueSubmittedNotification(complaint, req.user),
+      `complaint-submitted-email-${complaint._id}`,
     );
 
     // Auto-assign technician if requested
@@ -124,9 +237,14 @@ exports.createComplaint = async (req, res) => {
         await complaint.save();
 
         // Populate technician details in response
+
         const updatedComplaint = await Complaint.findById(complaint._id)
           .populate("userId", "name email")
-          .populate("technician", "name email specialization");
+          .populate({
+            path: "technician",
+            select: "name email specialization ownerId",
+            populate: { path: "ownerId", select: "name address" },
+          });
 
         response.data = updatedComplaint;
         response.message = "Complaint registered and assigned to technician";
@@ -213,19 +331,28 @@ exports.getComplaints = async (req, res) => {
   try {
     let query = {};
 
-    // Filter by user role
+    // Organization-based filtering
+    if (req.user.role === "admin") {
+      query.ownerId = req.user.ownerId;
+    }
     if (req.user.role === "user") {
       query.userId = req.user._id;
-    } else if (req.user.role === "technician") {
-      // Technicians can only see complaints assigned to them.
-      query.technician = req.user._id;
+      // Do NOT filter by ownerId for users, so they see all their complaints
     }
-    // Admins see all complaints
+    if (req.user.role === "technician") {
+      query.technician = req.user._id;
+      // Optionally, also filter by ownerId if you want to restrict technicians to their org:
+      // query.ownerId = req.user.ownerId;
+    }
 
     const complaints = await Complaint.find(query)
       .sort({ createdAt: -1 })
       .populate("userId", "name email")
-      .populate("technician", "name email specialization");
+      .populate({
+        path: "technician",
+        select: "name email specialization ownerId",
+        populate: { path: "ownerId", select: "name address" },
+      });
 
     res.json({
       success: true,
@@ -242,6 +369,75 @@ exports.getComplaints = async (req, res) => {
 
 // @desc    Get single complaint
 // @route   GET /api/complaints/:id
+// @desc    Rate technician for a resolved complaint
+// @route   PATCH /api/complaints/:id/rate
+// @access  Private (user only)
+exports.rateTechnician = async (req, res) => {
+  try {
+    const complaint = await require("../models/Complaint").findById(
+      req.params.id,
+    );
+    if (!complaint) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Complaint not found" });
+    }
+    // Only the complaint's user (resident) or admin can rate
+    const isReporter = complaint.userId.toString() === req.user._id.toString();
+    if (
+      !((req.user.role === "user" && isReporter) || req.user.role === "admin")
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to rate this complaint",
+      });
+    }
+    // Only allow rating if complaint is resolved
+    if (complaint.status !== "Resolved") {
+      return res.status(400).json({
+        success: false,
+        message: "Can only rate after complaint is resolved",
+      });
+    }
+    const { technicianRating, technicianFeedback } = req.body;
+    if (!technicianRating || technicianRating < 1 || technicianRating > 5) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Rating must be between 1 and 5" });
+    }
+    // Prevent duplicate ratings by same user/role
+    if (!complaint.ratings) complaint.ratings = [];
+    const alreadyRated = complaint.ratings.some(
+      (r) =>
+        r.rater.toString() === req.user._id.toString() &&
+        r.role === req.user.role,
+    );
+    if (alreadyRated) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already rated this complaint.",
+      });
+    }
+    complaint.ratings.push({
+      rater: req.user._id,
+      role: req.user.role === "user" ? "resident" : req.user.role,
+      rating: technicianRating,
+      feedback: technicianFeedback || "",
+    });
+    // For legacy compatibility, update single fields with latest rating
+    complaint.technicianRating = technicianRating;
+    complaint.technicianFeedback = technicianFeedback || "";
+    await complaint.save();
+    res.json({
+      success: true,
+      message: "Thank you for your feedback!",
+      data: { technicianRating, technicianFeedback },
+    });
+  } catch (error) {
+    console.error("Rate technician error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 // @access  Private
 exports.getComplaint = async (req, res) => {
   try {
@@ -661,12 +857,25 @@ exports.updateTechnicianDecision = async (req, res) => {
       complaint.technicianDecisionNote = safeNote || undefined;
       complaint.status = "Pending";
 
+      // Track all rejected technicians for this complaint
+      if (!Array.isArray(complaint.rejectedTechnicianIds)) {
+        complaint.rejectedTechnicianIds = [];
+      }
+      // Add current technician if not already present
+      if (
+        !complaint.rejectedTechnicianIds.some(
+          (id) => id.toString() === req.user._id.toString(),
+        )
+      ) {
+        complaint.rejectedTechnicianIds.push(req.user._id);
+      }
+
       let reassignedTechnician = null;
       try {
         reassignedTechnician = await technicianAssigner.assignTechnician(
           complaint,
           {
-            excludeTechnicianIds: [req.user._id],
+            excludeTechnicianIds: complaint.rejectedTechnicianIds,
           },
         );
       } catch (reassignError) {
@@ -757,6 +966,15 @@ exports.updateTechnicianDecision = async (req, res) => {
           createdBy: req.user._id,
         }),
         `tech-reschedule-${complaint._id}`,
+      );
+
+      triggerNotification(
+        emailService.sendRescheduleNotification(
+          complaint,
+          parsedDate,
+          safeNote,
+        ),
+        `reschedule-email-${complaint._id}`,
       );
     }
 

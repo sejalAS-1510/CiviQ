@@ -1,3 +1,8 @@
+type ApiPayload = {
+  success?: boolean;
+  message?: string;
+  data?: unknown;
+};
 import { create } from "zustand";
 import { useAuthStore } from "@/store/authStore";
 
@@ -24,6 +29,22 @@ export interface Issue {
   technicianDecision?: "pending" | "accepted" | "rejected" | "rescheduled";
   technicianDecisionNote?: string;
   scheduledFor?: Date;
+  residentName?: string;
+  residentEmail?: string;
+  technicianName?: string;
+  technicianEmail?: string;
+  technicianSpecialization?: string;
+  technicianOrgName?: string;
+  technicianOrgAddress?: string;
+  technicianRating?: number;
+  technicianFeedback?: string;
+  ratings?: Array<{
+    rater: string;
+    role: "admin" | "resident";
+    rating: number;
+    feedback?: string;
+    createdAt?: string;
+  }>;
 }
 
 interface IssueState {
@@ -36,6 +57,8 @@ interface IssueState {
     description: string;
     location: string;
     imageFile?: File;
+    residentName?: string;
+    residentEmail?: string;
   }) => Promise<{ success: boolean; message: string }>;
   updateStatus: (
     id: string,
@@ -50,7 +73,20 @@ interface IssueState {
       rescheduleFor?: string;
     },
   ) => Promise<{ success: boolean; message: string }>;
+  rateTechnician: (
+    id: string,
+    rating: number,
+    feedback: string,
+  ) => Promise<{ success: boolean; message: string }>;
   clearError: () => void;
+}
+// Backend rating type for strict mapping
+interface BackendRating {
+  rater: string;
+  role: "admin" | "resident";
+  rating: number;
+  feedback?: string;
+  createdAt?: string;
 }
 
 type BackendStatus = "Pending" | "In Progress" | "Resolved" | "Closed";
@@ -83,6 +119,17 @@ interface BackendComplaint {
     name?: string;
     email?: string;
   };
+  technician?: {
+    name?: string;
+    email?: string;
+    specialization?: string;
+    ownerId?: {
+      name?: string;
+      address?: string;
+    };
+  };
+  technicianRating?: number;
+  technicianFeedback?: string;
 }
 
 function fromBackendTechnicianDecision(
@@ -155,7 +202,9 @@ function fromBackendStatus(status: BackendStatus): IssueStatus {
   return "pending";
 }
 
-function toIssue(complaint: BackendComplaint): Issue {
+function toIssue(
+  complaint: BackendComplaint & { ratings?: BackendRating[] },
+): Issue {
   const imagePath = complaint.images?.[0];
   const imageUrl = imagePath
     ? imagePath.startsWith("http")
@@ -182,9 +231,26 @@ function toIssue(complaint: BackendComplaint): Issue {
     scheduledFor: complaint.scheduledFor
       ? new Date(complaint.scheduledFor)
       : undefined,
+    technicianName: complaint.technician?.name,
+    technicianEmail: complaint.technician?.email,
+    technicianSpecialization: complaint.technician?.specialization,
+    technicianOrgName: complaint.technician?.ownerId?.name,
+    technicianOrgAddress: complaint.technician?.ownerId?.address,
+    technicianRating: complaint.technicianRating,
+    technicianFeedback: complaint.technicianFeedback,
+    ratings: Array.isArray(complaint.ratings)
+      ? complaint.ratings.map((r) => ({
+          rater: r.rater,
+          role: r.role,
+          rating: r.rating,
+          feedback: r.feedback,
+          createdAt: r.createdAt,
+        }))
+      : undefined,
   };
 }
-
+// ...existing code...
+// Move apiRequest to top-level scope
 async function apiRequest(path: string, options: RequestInit = {}) {
   const { token } = useAuthStore.getState();
   const headers: Record<string, string> = {
@@ -206,16 +272,14 @@ async function apiRequest(path: string, options: RequestInit = {}) {
   });
 
   const text = await response.text();
-  let payload: any = {};
+  let payload: ApiPayload = {};
   try {
-    payload = text ? JSON.parse(text) : {};
+    payload = text ? (JSON.parse(text) as ApiPayload) : {};
   } catch {
     payload = { message: text || "Unexpected response from server" };
   }
-
   return { response, payload };
 }
-
 export const useIssueStore = create<IssueState>((set) => ({
   issues: [],
   loading: false,
@@ -229,16 +293,18 @@ export const useIssueStore = create<IssueState>((set) => ({
         throw new Error(payload?.message || "Failed to load issues");
       }
 
-      const complaints = Array.isArray(payload.data) ? payload.data : [];
+      const complaints = Array.isArray(payload.data)
+        ? (payload.data as BackendComplaint[])
+        : [];
       set({
         issues: complaints.map(toIssue),
         loading: false,
         error: null,
       });
-    } catch (error: any) {
+    } catch (error) {
       set({
         loading: false,
-        error: error?.message || "Unable to load issues",
+        error: error instanceof Error ? error.message : "Unable to load issues",
       });
     }
   },
@@ -253,6 +319,13 @@ export const useIssueStore = create<IssueState>((set) => ({
       if (issue.imageFile) {
         formData.append("image", issue.imageFile);
       }
+      // Add residentName and residentEmail if present
+      if (issue.residentName) {
+        formData.append("residentName", issue.residentName);
+      }
+      if (issue.residentEmail) {
+        formData.append("residentEmail", issue.residentEmail);
+      }
 
       const { response, payload } = await apiRequest("/api/complaints", {
         method: "POST",
@@ -265,7 +338,7 @@ export const useIssueStore = create<IssueState>((set) => ({
         return { success: false, message };
       }
 
-      const createdIssue = toIssue(payload.data);
+      const createdIssue = toIssue(payload.data as BackendComplaint);
       set((state) => ({
         issues: [createdIssue, ...state.issues],
         loading: false,
@@ -276,8 +349,9 @@ export const useIssueStore = create<IssueState>((set) => ({
         success: true,
         message: payload?.message || "Issue reported successfully",
       };
-    } catch (error: any) {
-      const message = error?.message || "Unable to submit issue";
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to submit issue";
       set({ loading: false, error: message });
       return { success: false, message };
     }
@@ -296,7 +370,7 @@ export const useIssueStore = create<IssueState>((set) => ({
 
       set((state) => ({
         issues: state.issues.map((i) =>
-          i.id === id ? toIssue(payload.data) : i,
+          i.id === id ? toIssue(payload.data as BackendComplaint) : i,
         ),
       }));
 
@@ -304,10 +378,11 @@ export const useIssueStore = create<IssueState>((set) => ({
         success: true,
         message: payload?.message || "Status updated successfully",
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        message: error?.message || "Unable to update status",
+        message:
+          error instanceof Error ? error.message : "Unable to update status",
       };
     }
   },
@@ -330,10 +405,11 @@ export const useIssueStore = create<IssueState>((set) => ({
         success: true,
         message: payload?.message || "Issue deleted successfully",
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        message: error?.message || "Unable to delete issue",
+        message:
+          error instanceof Error ? error.message : "Unable to delete issue",
       };
     }
   },
@@ -355,7 +431,7 @@ export const useIssueStore = create<IssueState>((set) => ({
 
       set((state) => ({
         issues: state.issues.map((i) =>
-          i.id === id ? toIssue(payload.data) : i,
+          i.id === id ? toIssue(payload.data as BackendComplaint) : i,
         ),
       }));
 
@@ -363,10 +439,65 @@ export const useIssueStore = create<IssueState>((set) => ({
         success: true,
         message: payload?.message || "Technician decision updated",
       };
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        message: error?.message || "Unable to update technician decision",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to update technician decision",
+      };
+    }
+  },
+
+  rateTechnician: async (id: string, rating: number, feedback: string) => {
+    try {
+      const { response, payload } = await apiRequest(
+        `/api/complaints/${id}/rate`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            technicianRating: rating,
+            technicianFeedback: feedback,
+          }),
+        },
+      );
+      if (!response.ok || !payload?.success) {
+        const message = payload?.message || "Failed to submit rating";
+        return { success: false, message };
+      }
+      set((state) => ({
+        issues: state.issues.map((i) => {
+          if (i.id !== id) return i;
+          // Append to ratings array for immediate UI update
+          const newRating = {
+            rater: "me", // Optionally replace with actual user id if available
+            role: (useAuthStore.getState().user?.role === "admin"
+              ? "admin"
+              : "resident") as "admin" | "resident",
+            rating,
+            feedback,
+            createdAt: new Date().toISOString(),
+          };
+          return {
+            ...i,
+            technicianRating: rating,
+            technicianFeedback: feedback,
+            ratings: Array.isArray(i.ratings)
+              ? [...i.ratings, newRating]
+              : [newRating],
+          };
+        }),
+      }));
+      return {
+        success: true,
+        message: payload?.message || "Thank you for your feedback!",
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Unable to submit rating",
       };
     }
   },

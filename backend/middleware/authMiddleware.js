@@ -12,14 +12,21 @@ const protect = async (req, res, next) => {
     try {
       // Get token from header
       token = req.headers.authorization.split(" ")[1];
+      console.log("[authMiddleware] Received token:", token);
 
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log("[authMiddleware] Decoded JWT payload:", decoded);
 
       // Get user from the token
       req.user = await User.findById(decoded.id).select("-password");
+      console.log("[authMiddleware] User from DB:", req.user);
 
       if (!req.user) {
+        console.warn(
+          "[authMiddleware] User not found for decoded.id:",
+          decoded.id,
+        );
         return res.status(401).json({
           success: false,
           message: "User not found",
@@ -28,6 +35,10 @@ const protect = async (req, res, next) => {
 
       // Check if user is active
       if (!req.user.isActive) {
+        console.warn(
+          "[authMiddleware] Account is deactivated for user:",
+          req.user._id,
+        );
         return res.status(401).json({
           success: false,
           message: "Account is deactivated",
@@ -87,7 +98,10 @@ const admin = (req, res, next) => {
 
 // Check if user is technician or admin
 const technicianOrAdmin = (req, res, next) => {
-  if (req.user && (req.user.role === "technician" || req.user.role === "admin")) {
+  if (
+    req.user &&
+    (req.user.role === "technician" || req.user.role === "admin")
+  ) {
     next();
   } else {
     res.status(403).json({

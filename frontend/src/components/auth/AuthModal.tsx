@@ -7,7 +7,9 @@
 //   • After submission shows a "check your inbox" confirmation panel
 //   • Back links return cleanly to login mode
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+// Organization type for dropdown
+type Organization = { _id: string; name: string };
 import { motion, AnimatePresence } from "framer-motion";
 import { X, User, Mail, Lock, Shield, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,19 +28,59 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 interface AuthModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  mode?: "login" | "signup";
 }
 
 type ModalMode = "login" | "signup" | "forgot";
 
-export function AuthModal({ open, onOpenChange }: AuthModalProps) {
+export function AuthModal({
+  open,
+  onOpenChange,
+  mode: modeProp,
+}: AuthModalProps) {
   // ── Existing login / signup state (unchanged) ──────────────────────────────
   const [mode, setMode] = useState<ModalMode>("login");
+  // If mode prop is provided, sync it with state when modal opens
+  useEffect(() => {
+    if (open && modeProp) {
+      setMode(modeProp as ModalMode);
+    }
+  }, [open, modeProp]);
+
+  // ── Organization dropdown state ──────────────────────────────────────────
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [ownerId, setOwnerId] = useState<string>("");
+  const [orgLoading, setOrgLoading] = useState(false);
+  const [orgError, setOrgError] = useState("");
+
+  // Fetch organizations for dropdown
+  useEffect(() => {
+    if (mode !== "signup") return;
+    setOrgLoading(true);
+    fetch("/api/organizations")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data)) {
+          setOrganizations(data.data);
+          setOrgError("");
+        } else {
+          setOrgError("Failed to load organizations");
+        }
+      })
+      .catch(() => setOrgError("Failed to load organizations"))
+      .finally(() => setOrgLoading(false));
+  }, [mode]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<UserRole>("resident");
   const [specialization, setSpecialization] =
     useState<TechnicianSpecialization>("Electrical");
+  // ── Add Organization modal state ─────────────────────────────────────────
+  const [showAddOrg, setShowAddOrg] = useState(false);
+  const [newOrgName, setNewOrgName] = useState("");
+  const [addOrgLoading, setAddOrgLoading] = useState(false);
+  const [addOrgError, setAddOrgError] = useState("");
   const { signup, loginWithCredentials, loading, error, clearError } =
     useAuthStore();
 
@@ -76,19 +118,48 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
     e.preventDefault();
 
     if (mode === "signup") {
+      if (!name.trim()) {
+        toast.error("Please enter your full name");
+        return;
+      }
+      if (!ownerId) {
+        toast.error("Please select your organization");
+        return;
+      }
+      if (!email.trim()) {
+        toast.error("Please enter your email address");
+        return;
+      }
+      if (!password.trim()) {
+        toast.error("Please enter a password");
+        return;
+      }
       const result = await signup({
         name,
         email,
         password,
         role,
         specialization: role === "technician" ? specialization : undefined,
+        ownerId,
       });
       if (result.success) {
-        toast.success("Signup successful", {
-          description: "Your account is created. Please login to continue.",
-        });
-        switchMode("login");
-        setPassword("");
+        // Automatically log in after signup
+        const loginResult = await loginWithCredentials({ email, password });
+        if (loginResult.success) {
+          toast.success("Signup successful", {
+            description: "Your account is created and you are now logged in.",
+          });
+          onOpenChange(false); // Close modal
+          setName("");
+          setEmail("");
+          setPassword("");
+          clearError();
+        } else {
+          toast.error("Signup succeeded but login failed", {
+            description: loginResult.message,
+          });
+          switchMode("login");
+        }
       } else {
         toast.error("Signup failed", { description: result.message });
       }
@@ -134,7 +205,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
         setForgotSent(true);
       } else {
         setForgotError(
-          data.message || "Something went wrong. Please try again."
+          data.message || "Something went wrong. Please try again.",
         );
       }
     } catch {
@@ -290,19 +361,140 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
                   {/* Full Name — signup only */}
                   {mode === "signup" && (
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Full Name</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          placeholder="John Doe"
-                          className="pl-9"
-                          required
-                        />
+                    <>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Full Name</Label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="John Doe"
+                            className="pl-9"
+                            required
+                          />
+                        </div>
                       </div>
-                    </div>
+                      {/* Organization Dropdown + Add New */}
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">
+                          Organization
+                        </Label>
+                        <div className="flex gap-2">
+                          <select
+                            value={ownerId}
+                            onChange={(e) => setOwnerId(e.target.value)}
+                            className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                            required
+                            disabled={orgLoading}
+                          >
+                            <option value="">
+                              {orgLoading
+                                ? "Loading..."
+                                : "Select your organization"}
+                            </option>
+                            {organizations.map((org) => (
+                              <option key={org._id} value={org._id}>
+                                {org.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="h-10 px-3 rounded-md border border-primary text-primary bg-background hover:bg-primary/10 text-xs font-semibold"
+                            onClick={() => setShowAddOrg(true)}
+                          >
+                            Add New
+                          </button>
+                        </div>
+                        {orgError && (
+                          <div className="text-xs text-red-600 mt-1">
+                            {orgError}
+                          </div>
+                        )}
+                      </div>
+                      {/* Add Organization Modal */}
+                      {showAddOrg && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+                          <div className="bg-card rounded-xl shadow-lg p-6 w-full max-w-sm relative">
+                            <button
+                              className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowAddOrg(false)}
+                              aria-label="Close"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
+                            <h3 className="text-lg font-bold mb-2">
+                              Add Organization
+                            </h3>
+                            <div className="space-y-3">
+                              <Input
+                                value={newOrgName}
+                                onChange={(e) => setNewOrgName(e.target.value)}
+                                placeholder="Organization name"
+                                required
+                                autoFocus
+                              />
+                              {addOrgError && (
+                                <div className="text-xs text-red-600">
+                                  {addOrgError}
+                                </div>
+                              )}
+                              <Button
+                                type="button"
+                                className="w-full"
+                                disabled={addOrgLoading}
+                                onClick={async () => {
+                                  if (!newOrgName.trim()) return;
+                                  setAddOrgLoading(true);
+                                  setAddOrgError("");
+                                  try {
+                                    const res = await fetch(
+                                      "/api/organizations",
+                                      {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify({
+                                          name: newOrgName.trim(),
+                                        }),
+                                      },
+                                    );
+                                    const data = await res.json();
+                                    if (data.success && data.data) {
+                                      setOrganizations((prev) => [
+                                        ...prev,
+                                        data.data,
+                                      ]);
+                                      setOwnerId(data.data._id);
+                                      setShowAddOrg(false);
+                                      setNewOrgName("");
+                                      toast.success("Organization added");
+                                    } else {
+                                      setAddOrgError(
+                                        data.message ||
+                                          "Failed to add organization",
+                                      );
+                                    }
+                                  } catch {
+                                    setAddOrgError(
+                                      "Failed to add organization",
+                                    );
+                                  } finally {
+                                    setAddOrgLoading(false);
+                                  }
+                                }}
+                              >
+                                {addOrgLoading
+                                  ? "Adding..."
+                                  : "Add Organization"}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {/* Email */}
@@ -362,10 +554,11 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                             key={r.value}
                             type="button"
                             onClick={() => setRole(r.value)}
-                            className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${role === r.value
+                            className={`p-2.5 rounded-lg border text-center transition-all duration-200 ${
+                              role === r.value
                                 ? "border-primary bg-primary/5 shadow-sm"
                                 : "border-border hover:border-primary/30"
-                              }`}
+                            }`}
                           >
                             <p className="text-xs font-semibold text-foreground">
                               {r.label}
@@ -386,7 +579,7 @@ export function AuthModal({ open, onOpenChange }: AuthModalProps) {
                             value={specialization}
                             onChange={(e) =>
                               setSpecialization(
-                                e.target.value as TechnicianSpecialization
+                                e.target.value as TechnicianSpecialization,
                               )
                             }
                             className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"

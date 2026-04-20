@@ -57,6 +57,12 @@ const upload = multer({
 // All complaint routes require authentication
 router.use(protect);
 
+// Technician average rating endpoint (must be after protect)
+const {
+  getTechnicianAverageRating,
+} = require("../controllers/complaintController");
+router.get("/technicians/:id/average-rating", getTechnicianAverageRating);
+
 // Routes
 router
   .route("/")
@@ -64,6 +70,11 @@ router
   .post(upload.single("image"), createComplaint);
 
 // Place specific path before /:id to avoid route shadowing.
+
+// Technician rating by resident
+const { rateTechnician } = require("../controllers/complaintController");
+router.patch("/:id/rate", rateTechnician);
+
 router.get("/technicians/stats", admin, getTechnicianStats);
 
 router

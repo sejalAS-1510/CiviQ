@@ -1,3 +1,24 @@
+interface NotificationApiItem {
+  _id: string;
+  title: string;
+  message: string;
+  type?: NotificationType;
+  category?: NotificationCategory;
+  isRead?: boolean;
+  createdAt: string;
+  readAt?: string;
+  complaintId?: {
+    _id: string;
+    description?: string;
+    location?: string;
+    status?: string;
+    category?: string;
+  };
+  createdBy?: {
+    name?: string;
+    role?: string;
+  };
+}
 import { create } from "zustand";
 import { useAuthStore } from "@/store/authStore";
 
@@ -43,7 +64,15 @@ interface NotificationState {
   clearError: () => void;
 }
 
-async function parseApiPayload(response: Response): Promise<any> {
+type NotificationApiPayload = {
+  success?: boolean;
+  message?: string;
+  data?: unknown;
+};
+
+async function parseApiPayload(
+  response: Response,
+): Promise<NotificationApiPayload> {
   const text = await response.text();
   if (!text) return {};
 
@@ -57,7 +86,7 @@ async function parseApiPayload(response: Response): Promise<any> {
   }
 
   try {
-    return JSON.parse(text);
+    return JSON.parse(text) as NotificationApiPayload;
   } catch {
     return { success: false, message: text };
   }
@@ -86,29 +115,30 @@ async function apiRequest(path: string, options: RequestInit = {}) {
   return { response, payload };
 }
 
-function toNotification(item: any): NotificationItem {
+function toNotification(item: unknown): NotificationItem {
+  const i = item as NotificationApiItem;
   return {
-    id: item._id,
-    title: item.title,
-    message: item.message,
-    type: item.type || "info",
-    category: item.category || "system",
-    isRead: Boolean(item.isRead),
-    createdAt: item.createdAt,
-    readAt: item.readAt,
-    complaint: item.complaintId
+    id: i._id,
+    title: i.title,
+    message: i.message,
+    type: i.type || "info",
+    category: i.category || "system",
+    isRead: Boolean(i.isRead),
+    createdAt: i.createdAt,
+    readAt: i.readAt,
+    complaint: i.complaintId
       ? {
-          id: item.complaintId._id,
-          description: item.complaintId.description,
-          location: item.complaintId.location,
-          status: item.complaintId.status,
-          category: item.complaintId.category,
+          id: i.complaintId._id,
+          description: i.complaintId.description,
+          location: i.complaintId.location,
+          status: i.complaintId.status,
+          category: i.complaintId.category,
         }
       : undefined,
-    createdBy: item.createdBy
+    createdBy: i.createdBy
       ? {
-          name: item.createdBy.name,
-          role: item.createdBy.role,
+          name: i.createdBy.name,
+          role: i.createdBy.role,
         }
       : undefined,
   };
@@ -129,7 +159,9 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         throw new Error(payload?.message || "Failed to load notifications");
       }
 
-      const items = Array.isArray(payload.data) ? payload.data : [];
+      const items = Array.isArray(payload.data)
+        ? (payload.data as Record<string, unknown>[])
+        : [];
       const notifications = items.map(toNotification);
       set({
         notifications,
@@ -137,10 +169,13 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         loading: false,
         error: null,
       });
-    } catch (error: any) {
+    } catch (error) {
       set({
         loading: false,
-        error: error?.message || "Unable to load notifications",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to load notifications",
       });
     }
   },
@@ -156,7 +191,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         );
       }
 
-      set({ unreadCount: payload?.data?.count || 0 });
+      set({ unreadCount: (payload.data as { count?: number })?.count || 0 });
     } catch {
       const notifications = get().notifications;
       set({ unreadCount: notifications.filter((item) => !item.isRead).length });
@@ -185,8 +220,13 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
           unreadCount: notifications.filter((item) => !item.isRead).length,
         };
       });
-    } catch (error: any) {
-      set({ error: error?.message || "Unable to update notification" });
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to update notification",
+      });
     }
   },
   markAllAsRead: async () => {
@@ -210,8 +250,13 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         })),
         unreadCount: 0,
       }));
-    } catch (error: any) {
-      set({ error: error?.message || "Unable to update notifications" });
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to update notifications",
+      });
     }
   },
 }));

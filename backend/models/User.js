@@ -43,6 +43,12 @@ const UserSchema = new mongoose.Schema({
     trim: true,
   },
 
+  ownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Organization", // or "Owner", or just leave as ObjectId if you don't have a separate collection yet
+    required: true,
+  },
+
   specialization: {
     type: String,
     enum: [

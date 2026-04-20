@@ -367,62 +367,73 @@ exports.sendAssignmentNotification = async (complaint, attachment = null) => {
       priority,
     } = complaint || {};
 
-    if (!userId?.email || !technician?.email) {
+    const issueId = toIssueId(_id);
+    const complaintUrl = `${DEFAULT_FRONTEND_URL}/complaint/${_id}`;
+
+    const jobs = [];
+
+    if (userId?.email) {
+      jobs.push({
+        label: `assignment-user-${issueId}`,
+        promise: sendMailWithRetry(
+          {
+            to: userId.email,
+            subject: `Issue #${issueId} assigned: ${category || "General"}`,
+            html: assignmentTemplate({
+              name: userId.name || "Citizen",
+              issueId,
+              category,
+              location,
+              description,
+              priority,
+              technicianName: technician?.name || "Assigned Technician",
+              complaintUrl,
+              recipient: "user",
+            }),
+            attachments: normalizeAttachments(attachment),
+          },
+          `assignment-user-${issueId}`,
+        ),
+      });
+    }
+
+    if (technician?.email) {
+      jobs.push({
+        label: `assignment-tech-${issueId}`,
+        promise: sendMailWithRetry(
+          {
+            to: technician.email,
+            subject: `New assignment #${issueId} (${priority || "Medium"})`,
+            html: assignmentTemplate({
+              name: technician.name || "Technician",
+              issueId,
+              category,
+              location,
+              description,
+              priority,
+              complaintUrl,
+              recipient: "technician",
+            }),
+            attachments: normalizeAttachments(attachment),
+          },
+          `assignment-tech-${issueId}`,
+        ),
+      });
+    }
+
+    if (!jobs.length) {
       return {
         success: false,
         reason: "missing-recipient-email",
       };
     }
 
-    const issueId = toIssueId(_id);
-    const complaintUrl = `${DEFAULT_FRONTEND_URL}/complaint/${_id}`;
-
-    const userMail = {
-      to: userId.email,
-      subject: `Issue #${issueId} assigned: ${category || "General"}`,
-      html: assignmentTemplate({
-        name: userId.name || "Citizen",
-        issueId,
-        category,
-        location,
-        description,
-        priority,
-        technicianName: technician.name || "Assigned Technician",
-        complaintUrl,
-        recipient: "user",
-      }),
-      attachments: normalizeAttachments(attachment),
-    };
-
-    const technicianMail = {
-      to: technician.email,
-      subject: `New assignment #${issueId} (${priority || "Medium"})`,
-      html: assignmentTemplate({
-        name: technician.name || "Technician",
-        issueId,
-        category,
-        location,
-        description,
-        priority,
-        complaintUrl,
-        recipient: "technician",
-      }),
-      attachments: normalizeAttachments(attachment),
-    };
-
-    const settled = await Promise.allSettled([
-      sendMailWithRetry(userMail, `assignment-user-${issueId}`),
-      sendMailWithRetry(technicianMail, `assignment-tech-${issueId}`),
-    ]);
-
+    const settled = await Promise.allSettled(jobs.map((job) => job.promise));
     const normalized = settled.map((item, idx) => {
       if (item.status === "fulfilled") return item.value;
       return {
         success: false,
-        label:
-          idx === 0
-            ? `assignment-user-${issueId}`
-            : `assignment-tech-${issueId}`,
+        label: jobs[idx].label,
         error: item.reason?.message || "unknown-error",
       };
     });
@@ -430,6 +441,54 @@ exports.sendAssignmentNotification = async (complaint, attachment = null) => {
     return notifyResultSummary(normalized, "assignment");
   } catch (error) {
     console.error("[email] Assignment notification failed:", error.message);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+};
+
+exports.sendIssueSubmittedNotification = async (
+  complaint,
+  reporter,
+  attachment = null,
+) => {
+  try {
+    const sourceUser = reporter || complaint?.userId || {};
+    const recipientEmail = sourceUser?.email;
+
+    if (!recipientEmail) {
+      return {
+        success: false,
+        reason: "missing-recipient-email",
+      };
+    }
+
+    const issueId = toIssueId(complaint?._id);
+    const complaintUrl = `${DEFAULT_FRONTEND_URL}/complaint/${complaint?._id}`;
+
+    const mail = {
+      to: recipientEmail,
+      subject: `Issue #${issueId} submitted successfully`,
+      html: submittedTemplate({
+        name: sourceUser?.name || "Citizen",
+        issueId,
+        category: complaint?.category,
+        location: complaint?.location,
+        description: complaint?.description,
+        priority: complaint?.priority,
+        complaintUrl,
+      }),
+      attachments: normalizeAttachments(attachment),
+    };
+
+    const result = await sendMailWithRetry(mail, `submitted-user-${issueId}`);
+    return notifyResultSummary([result], "submitted");
+  } catch (error) {
+    console.error(
+      "[email] Issue submission notification failed:",
+      error.message,
+    );
     return {
       success: false,
       error: error.message,
@@ -525,6 +584,98 @@ exports.sendResolutionNotification = async (
   }
 };
 
+exports.sendRescheduleNotification = async (
+  complaint,
+  scheduledFor,
+  note = "",
+  attachment = null,
+) => {
+  try {
+    const { userId, technician, _id, category, location } = complaint || {};
+
+    const issueId = toIssueId(_id);
+    const complaintUrl = `${DEFAULT_FRONTEND_URL}/complaint/${_id}`;
+    const scheduledLabel = new Date(scheduledFor).toLocaleString();
+
+    const jobs = [];
+
+    if (userId?.email) {
+      jobs.push({
+        label: `reschedule-user-${issueId}`,
+        promise: sendMailWithRetry(
+          {
+            to: userId.email,
+            subject: `Issue #${issueId} visit rescheduled`,
+            html: rescheduleTemplate({
+              name: userId.name || "Citizen",
+              recipient: "user",
+              issueId,
+              category,
+              location,
+              scheduledFor: scheduledLabel,
+              note,
+              complaintUrl,
+              technicianName: technician?.name || "Technician",
+            }),
+            attachments: normalizeAttachments(attachment),
+          },
+          `reschedule-user-${issueId}`,
+        ),
+      });
+    }
+
+    if (technician?.email) {
+      jobs.push({
+        label: `reschedule-tech-${issueId}`,
+        promise: sendMailWithRetry(
+          {
+            to: technician.email,
+            subject: `Reschedule confirmed for issue #${issueId}`,
+            html: rescheduleTemplate({
+              name: technician.name || "Technician",
+              recipient: "technician",
+              issueId,
+              category,
+              location,
+              scheduledFor: scheduledLabel,
+              note,
+              complaintUrl,
+              technicianName: technician.name || "Technician",
+            }),
+            attachments: normalizeAttachments(attachment),
+          },
+          `reschedule-tech-${issueId}`,
+        ),
+      });
+    }
+
+    if (!jobs.length) {
+      return {
+        success: false,
+        reason: "missing-recipient-email",
+      };
+    }
+
+    const settled = await Promise.allSettled(jobs.map((job) => job.promise));
+    const normalized = settled.map((item, idx) => {
+      if (item.status === "fulfilled") return item.value;
+      return {
+        success: false,
+        label: jobs[idx].label,
+        error: item.reason?.message || "unknown-error",
+      };
+    });
+
+    return notifyResultSummary(normalized, "reschedule");
+  } catch (error) {
+    console.error("[email] Reschedule notification failed:", error.message);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+};
+
 exports.sendEmailWithAttachment = async (
   to,
   subject,
@@ -539,11 +690,11 @@ exports.sendEmailWithAttachment = async (
         html: htmlContent,
         attachments: attachment
           ? [
-            {
-              filename: attachment.filename,
-              content: attachment.content,
-            },
-          ]
+              {
+                filename: attachment.filename,
+                content: attachment.content,
+              },
+            ]
           : [],
       },
       "attachment-mail",
@@ -691,6 +842,24 @@ function assignmentTemplate(data) {
   `);
 }
 
+function submittedTemplate(data) {
+  const priority = data.priority || "Medium";
+
+  return baseCard(`
+    <div style="background:#2563eb;color:#fff;padding:18px 20px;font-size:18px;font-weight:600;">Issue Submitted</div>
+    <div style="padding:20px;">
+      <p>Hello ${data.name},</p>
+      <p>Your issue has been submitted successfully and is under review.</p>
+      <p><strong>Issue ID:</strong> #${data.issueId}</p>
+      <p><strong>Category:</strong> ${data.category || "General"}</p>
+      <p><strong>Location:</strong> ${data.location || "Not provided"}</p>
+      <p><strong>Priority:</strong> ${priority}</p>
+      <p><strong>Description:</strong><br/>${data.description || "No description provided"}</p>
+      <p><a href="${data.complaintUrl}">Open complaint details</a></p>
+    </div>
+  `);
+}
+
 function statusTemplate(data) {
   const color = getStatusColor(data.status);
 
@@ -720,6 +889,27 @@ function resolutionTemplate(data) {
       <p><strong>Location:</strong> ${data.location || "Not provided"}</p>
       <p><strong>Resolved by:</strong> ${data.technicianName}</p>
       <p><strong>Resolution details:</strong><br/>${data.resolutionDetails || "Resolution completed by field team."}</p>
+      <p><a href="${data.complaintUrl}">Open complaint details</a></p>
+    </div>
+  `);
+}
+
+function rescheduleTemplate(data) {
+  const intro =
+    data.recipient === "technician"
+      ? "You confirmed a reschedule for this issue."
+      : `Your issue visit has been rescheduled by ${data.technicianName}.`;
+
+  return baseCard(`
+    <div style="background:#9333ea;color:#fff;padding:18px 20px;font-size:18px;font-weight:600;">Issue Visit Rescheduled</div>
+    <div style="padding:20px;">
+      <p>Hello ${data.name},</p>
+      <p>${intro}</p>
+      <p><strong>Issue ID:</strong> #${data.issueId}</p>
+      <p><strong>Category:</strong> ${data.category || "General"}</p>
+      <p><strong>Location:</strong> ${data.location || "Not provided"}</p>
+      <p><strong>New Schedule:</strong> ${data.scheduledFor}</p>
+      <p><strong>Note:</strong><br/>${data.note || "No additional note provided."}</p>
       <p><a href="${data.complaintUrl}">Open complaint details</a></p>
     </div>
   `);

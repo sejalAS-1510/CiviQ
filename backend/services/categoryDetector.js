@@ -258,19 +258,26 @@ function countKeywordMatches(text, keywords) {
 }
 
 function classifyComplaint({ description, category }) {
+  const normalizedDescription = normalizeText(description || "");
+  const normalizedCategory = normalizeText(category || "");
   const normalizedText = normalizeText(
-    `${description || ""} ${category || ""}`,
+    `${normalizedDescription} ${normalizedCategory}`,
   );
   const hintedType = resolveHintedType(category);
 
   const scores = Object.keys(TYPE_KEYWORDS).reduce((acc, type) => {
-    const result = countKeywordMatches(normalizedText, TYPE_KEYWORDS[type]);
+    // Prioritize actual issue description signal over category label text.
+    const result = countKeywordMatches(
+      normalizedDescription,
+      TYPE_KEYWORDS[type],
+    );
     acc[type] = result;
     return acc;
   }, {});
 
   if (hintedType && scores[hintedType]) {
-    scores[hintedType].score += 3;
+    // Keep a small boost for hinted category without letting text fully override it.
+    scores[hintedType].score += 2;
   }
 
   const rankedTypes = Object.entries(scores)
@@ -278,9 +285,16 @@ function classifyComplaint({ description, category }) {
     .map(([type, data]) => ({ type, score: data.score }));
 
   const best = rankedTypes[0] || { type: "other", score: 0 };
-  const second = rankedTypes[1] || { type: "other", score: 0 };
-  const bestType = best.type;
-  const bestScore = best.score;
+  const hintedAsPrimary = hintedType && hintedType !== "other";
+  const bestType = hintedAsPrimary ? hintedType : best.type;
+  const bestScore = hintedAsPrimary
+    ? Math.max(scores[hintedType]?.score || 0, 3)
+    : best.score;
+
+  const second = rankedTypes.find((item) => item.type !== bestType) || {
+    type: "other",
+    score: 0,
+  };
 
   const confidence =
     bestScore >= 6 ? "high" : bestScore >= 3 ? "medium" : "low";

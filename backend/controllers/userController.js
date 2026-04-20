@@ -32,9 +32,24 @@ const generateToken = (id) => {
 // @access  Public
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role, phone, address, specialization } =
-      req.body;
+    const {
+      name,
+      email,
+      password,
+      role,
+      phone,
+      address,
+      specialization,
+      ownerId,
+    } = req.body;
     const normalizedRole = role || "user";
+
+    if (!ownerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Organization (ownerId) is required",
+      });
+    }
 
     if (normalizedRole === "technician" && !specialization) {
       return res.status(400).json({
@@ -81,6 +96,7 @@ exports.register = async (req, res) => {
       role: normalizedRole, // Default to user if not specified
       phone,
       address,
+      ownerId,
       specialization: normalizedSpecialization || "General",
       specializations:
         normalizedRole === "technician"
@@ -109,6 +125,7 @@ exports.register = async (req, res) => {
           address: user.address,
           specialization: user.specialization,
           specializations: user.specializations,
+          ownerId: user.ownerId,
         },
       });
     } else {
@@ -184,6 +201,7 @@ exports.login = async (req, res) => {
           address: user.address,
           specialization: user.specialization,
           specializations: user.specializations,
+          ownerId: user.ownerId,
           token: generateToken(user._id),
         },
       });
@@ -221,6 +239,7 @@ exports.getProfile = async (req, res) => {
           address: user.address,
           specialization: user.specialization,
           specializations: user.specializations,
+          ownerId: user.ownerId,
           isActive: user.isActive,
           lastLogin: user.lastLogin,
           createdAt: user.createdAt,
@@ -314,6 +333,7 @@ exports.updateProfile = async (req, res) => {
           address: updatedUser.address,
           specialization: updatedUser.specialization,
           specializations: updatedUser.specializations,
+          ownerId: updatedUser.ownerId,
           token: generateToken(updatedUser._id),
         },
       });
@@ -483,18 +503,26 @@ exports.deleteUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
 
-    if (user) {
-      await User.findByIdAndDelete(req.params.id);
-      res.json({
-        success: true,
-        message: "User deleted successfully",
-      });
-    } else {
-      res.status(404).json({
+    if (!user) {
+      return res.status(404).json({
         success: false,
         message: "User not found",
       });
     }
+
+    // Restrict deletion to same organization
+    if (user.ownerId.toString() !== req.user.ownerId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete users in your own organization.",
+      });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+    res.json({
+      success: true,
+      message: "User deleted successfully",
+    });
   } catch (error) {
     console.error("Delete user error:", error);
     res.status(500).json({
