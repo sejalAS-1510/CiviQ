@@ -56,7 +56,9 @@ function AllTechnicianRatings({ technicianId }: { technicianId: string }) {
         const parsed = JSON.parse(stored);
         token = parsed.token;
       }
-    } catch {}
+    } catch {
+      // Ignore JSON parse errors, treat as no token
+    }
     fetch(`/api/complaints?technician=${technicianId}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -213,7 +215,9 @@ const SettingsPage = () => {
             const parsed = JSON.parse(stored);
             token = parsed.token;
           }
-        } catch {}
+        } catch {
+          // Ignore JSON parse errors, treat as no token
+        }
         fetch(`/api/complaints/technicians/${user.id}/average-rating`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
