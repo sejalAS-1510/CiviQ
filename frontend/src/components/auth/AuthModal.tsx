@@ -23,7 +23,7 @@ import {
 import { toast } from "sonner";
 
 // Points to the backend. In Vite you can set VITE_API_URL in .env.
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_URL;
 
 interface AuthModalProps {
   open: boolean;
