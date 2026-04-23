@@ -17,7 +17,7 @@ export function TopBar({
   const { isAuthenticated, user, logout } = useAuthStore();
 
   return (
-    <header className="h-14 border-b border-border backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-30 bg-primary">
+    <header className="w-full h-14 border-b border-border backdrop-blur-sm flex items-center justify-between px-4 sticky top-0 z-30 bg-primary">
       <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}

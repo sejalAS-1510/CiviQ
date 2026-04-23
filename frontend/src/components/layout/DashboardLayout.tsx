@@ -20,7 +20,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const isProtected = protectedRoutes.includes(location.pathname);
 
   return (
-    <div className="bg-page-gradient min-h-screen flex w-full">
+    <div className="bg-page-gradient min-h-screen flex-col w-full">
       <AppSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <TopBar
         onMenuClick={() => setSidebarOpen(true)}
