@@ -206,11 +206,17 @@ function toIssue(
   complaint: BackendComplaint & { ratings?: BackendRating[] },
 ): Issue {
   const imagePath = complaint.images?.[0];
-  const imageUrl = imagePath
-    ? imagePath.startsWith("http")
-      ? imagePath
-      : imagePath
-    : undefined;
+  let imageUrl: string | undefined = undefined;
+  if (imagePath) {
+    if (imagePath.startsWith("http")) {
+      imageUrl = imagePath;
+    } else if (imagePath.startsWith("/uploads/")) {
+      // Always prefix with API_BASE (backend public URL)
+      imageUrl = `${API_BASE}${imagePath}`;
+    } else {
+      imageUrl = imagePath;
+    }
+  }
 
   return {
     id: complaint._id,

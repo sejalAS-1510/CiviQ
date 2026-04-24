@@ -378,11 +378,24 @@ const SettingsPage = () => {
             <div className="flex items-start gap-5">
               {/* LEFT: Avatar + Change/Remove buttons + accepted formats */}
               <div className="flex flex-col items-center gap-1.5 shrink-0">
-                <img
-                  src={user?.avatar || "/default-avatar.png"}
-                  alt="User avatar"
-                  className="w-20 h-20 rounded-full object-cover border bg-gray-100"
-                />
+                {/* Avatar image: ensure absolute URL in production */}
+                {(() => {
+                  let avatarSrc = user?.avatar || "/default-avatar.png";
+                  if (
+                    user?.avatar &&
+                    !user.avatar.startsWith("http") &&
+                    user.avatar.startsWith("/uploads/")
+                  ) {
+                    avatarSrc = `${import.meta.env.VITE_API_URL}${user.avatar}`;
+                  }
+                  return (
+                    <img
+                      src={avatarSrc}
+                      alt="User avatar"
+                      className="w-20 h-20 rounded-full object-cover border bg-gray-100"
+                    />
+                  );
+                })()}
                 {/* Buttons sit just below avatar with a small top gap */}
                 <div className="flex gap-2 mt-1">
                   <label className="inline-block">
