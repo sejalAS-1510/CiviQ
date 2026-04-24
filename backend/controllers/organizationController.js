@@ -29,7 +29,10 @@ const Organization = require("../models/Organization");
 // @access  Public
 exports.getOrganizations = async (req, res) => {
   try {
-    const orgs = await Organization.find({}, "_id name").sort({ name: 1 });
+    // Also return address field for each organization
+    const orgs = await Organization.find({}, "_id name address").sort({
+      name: 1,
+    });
     res.json({ success: true, data: orgs });
   } catch (error) {
     console.error("Get organizations error:", error);
