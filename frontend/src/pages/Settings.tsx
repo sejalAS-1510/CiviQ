@@ -181,7 +181,7 @@ const SettingsPage = () => {
       if (user.ownerId) {
         setOrgLoading(true);
         setOrgError(null);
-        fetch("/api/organizations")
+        fetch(`${import.meta.env.VITE_API_URL}/api/organizations`)
           .then((res) => res.json())
           .then((data) => {
             if (data.success && Array.isArray(data.data)) {
