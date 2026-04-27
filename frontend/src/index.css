@@ -1,3 +1,8 @@
+/* Custom style for rescheduled/note text in issue cards */
+.rescheduled-text {
+  color: #c6c5c1; /* amber-500, change as needed */
+  font-weight: 600;
+}
 html,
 body,
 #root {
