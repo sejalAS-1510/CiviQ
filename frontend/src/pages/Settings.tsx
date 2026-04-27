@@ -219,9 +219,10 @@ const SettingsPage = () => {
         } catch {
           // Ignore JSON parse errors, treat as no token
         }
-        fetch(`/api/complaints/technicians/${user.id}/average-rating`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
+        fetch(
+          `${import.meta.env.VITE_API_URL}/api/complaints/technicians/${user.id}/average-rating`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        )
           .then((res) => res.json())
           .then((data) => {
             if (data.success) {
