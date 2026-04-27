@@ -210,11 +210,12 @@ function toIssue(
   if (imagePath) {
     if (imagePath.startsWith("http")) {
       imageUrl = imagePath;
-    } else if (imagePath.startsWith("/uploads/")) {
-      // Always prefix with API_BASE (backend public URL)
-      imageUrl = `${API_BASE}${imagePath}`;
     } else {
-      imageUrl = imagePath;
+      // Normalize non-absolute paths to always start with '/'
+      const normalized = imagePath.startsWith("/")
+        ? imagePath
+        : `/${imagePath}`;
+      imageUrl = `${API_BASE}${normalized}`;
     }
   }
 

@@ -380,7 +380,7 @@ const SettingsPage = () => {
               <div className="flex flex-col items-center gap-1.5 shrink-0">
                 {/* Avatar image: ensure absolute URL in production */}
                 {(() => {
-                  let avatarSrc = user?.avatar || "/default-avatar.png";
+                  let avatarSrc = user?.avatar || "/default-avatar.svg";
                   if (
                     user?.avatar &&
                     !user.avatar.startsWith("http") &&
