@@ -268,15 +268,21 @@ async function ensureTransportReady() {
           error?.message || "",
         );
 
-      emailServiceDisabledReason = isAuthFailure
-        ? "email-auth-failed"
-        : "email-verify-failed";
+      // Keep the service disabled only for definite auth failures.
+      // For transient verify errors, allow a fresh retry on next request.
+      emailServiceDisabledReason = isAuthFailure ? "email-auth-failed" : null;
       transporter = null;
       transporterVerified = false;
 
-      console.warn(
-        `[email] Disabled for this runtime (${emailServiceDisabledReason}): ${error.message}`,
-      );
+      if (isAuthFailure) {
+        console.warn(
+          `[email] Disabled for this runtime (${emailServiceDisabledReason}): ${error.message}`,
+        );
+      } else {
+        console.warn(
+          `[email] Verify failed, will retry on next request: ${error.message}`,
+        );
+      }
       return null;
     }
   }

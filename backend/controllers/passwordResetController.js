@@ -73,6 +73,17 @@ exports.forgotPassword = async (req, res) => {
     );
     console.log("[passwordReset] sendPasswordResetEmail result:", emailResult);
 
+    if (!emailResult?.success) {
+      // Roll back token if email wasn't delivered to avoid stale unusable reset links.
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validateModifiedOnly: true });
+      console.warn(
+        "[passwordReset] Reset email not sent; token cleared for user:",
+        user.email,
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: "If that email is registered, a reset link has been sent.",
