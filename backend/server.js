@@ -143,6 +143,40 @@ app.post("/test", (req, res) => {
   res.json({ success: true, received: req.body });
 });
 
+// Test email endpoint - helps diagnose email configuration issues
+app.post("/test-email", async (req, res) => {
+  try {
+    const { to = "test@example.com" } = req.body;
+    const emailService = require("./services/emailService");
+
+    console.log(`[test-email] Testing email send to ${to}`);
+
+    const result = await emailService.sendMailWithRetry(
+      {
+        to,
+        subject: "CiviQ - Email Configuration Test",
+        html: `<p>If you received this email, your Gmail configuration is working correctly!</p><p>To: ${to}</p>`,
+      },
+      "test-email",
+    );
+
+    res.json({
+      success: result.success,
+      message: result.success
+        ? "Email sent successfully! Check your inbox."
+        : "Email send failed. Check server logs for details.",
+      details: result,
+    });
+  } catch (error) {
+    console.error("[test-email] Error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Test email failed. Check server logs.",
+      error: error.message,
+    });
+  }
+});
+
 // API routes
 app.use("/api/users", userRoutes);
 app.use("/api/complaints", complaintRoutes);

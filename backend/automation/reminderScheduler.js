@@ -75,7 +75,7 @@ async function startScheduler() {
   }
 
   // Run one cycle on startup so automation is verifiable immediately.
-  await sendPendingIssueReminders();
+  //await sendPendingIssueReminders();
 
   reminderJob = cron.schedule(schedule, sendPendingIssueReminders, {
     timezone: process.env.TZ || "Asia/Kolkata",

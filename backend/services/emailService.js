@@ -60,6 +60,7 @@ function isRetryableError(error) {
     "EAI_AGAIN",
     "ESOCKET",
     "EMESSAGE",
+    "ENETUNREACH",
   ]);
 
   const responseCode = Number(error?.responseCode || 0);
@@ -205,12 +206,19 @@ async function withRetry(taskFn, options) {
 
 function initializeTransporter() {
   if (transporter) return transporter;
-  if (emailServiceDisabledReason) return null;
+  if (emailServiceDisabledReason) {
+    console.debug(
+      `[email] Transporter already disabled: ${emailServiceDisabledReason}`,
+    );
+    return null;
+  }
 
   const emailProvider = resolveEmailProvider();
+  console.log(`[email] initializeTransporter: provider=${emailProvider}`);
 
   if (emailProvider === "sendgrid") {
     transporter = createSendGridClient();
+    console.log(`[email] initializeTransporter: sendgrid client created`);
     return transporter;
   }
 
@@ -219,6 +227,10 @@ function initializeTransporter() {
     readEnv("GMAIL_APP_PASSWORD") ||
     readEnv("GMAIL_PASS") ||
     readEnv("EMAIL_PASS");
+
+  console.log(
+    `[email] Gmail config: user=${gmailUser || "(missing)"}, password=${gmailPassword ? "(set)" : "(missing)"}`,
+  );
 
   if (!gmailUser || !gmailPassword) {
     if (!emailConfigWarned) {
@@ -231,16 +243,23 @@ function initializeTransporter() {
     return null;
   }
 
+  console.log(`[email] Creating gmail transport for ${gmailUser}`);
+
   transporter = nodemailer.createTransport({
-    service: "gmail",
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    family: 4,
     auth: {
       user: gmailUser,
       pass: gmailPassword,
     },
+    tls: {
+      rejectUnauthorized: false,
+    },
   });
+
+  console.log(`[email] Gmail transport created successfully`);
 
   return transporter;
 }
@@ -306,16 +325,26 @@ function withTimeout(promise, timeoutMs, label) {
 }
 
 async function sendMailWithRetry(mailOptions, label) {
+  console.log(`[email] sendMailWithRetry starting for ${label}`);
   const transport = await ensureTransportReady();
   if (!transport) {
+    const reason = emailServiceDisabledReason || "email-unavailable";
+    console.error(
+      `[email] sendMailWithRetry ${label}: transport unavailable (reason: ${reason})`,
+    );
     return {
       success: false,
-      reason: emailServiceDisabledReason || "email-unavailable",
+      reason,
       label,
     };
   }
 
   if (!mailOptions?.to || !mailOptions?.subject || !mailOptions?.html) {
+    console.error(`[email] sendMailWithRetry ${label}: invalid mail options`, {
+      to: mailOptions?.to ? "set" : "missing",
+      subject: mailOptions?.subject ? "set" : "missing",
+      html: mailOptions?.html ? "set" : "missing",
+    });
     return {
       success: false,
       reason: "invalid-mail-options",
@@ -323,6 +352,9 @@ async function sendMailWithRetry(mailOptions, label) {
     };
   }
 
+  console.log(
+    `[email] sendMailWithRetry ${label}: sending to ${mailOptions.to}`,
+  );
   const info = await withRetry(
     async () =>
       withTimeout(
@@ -340,6 +372,10 @@ async function sendMailWithRetry(mailOptions, label) {
     },
   );
 
+  console.log(`[email] sendMailWithRetry ${label}: sent successfully`, {
+    to: info.accepted,
+    messageId: info.messageId,
+  });
   return {
     success: true,
     label,
@@ -989,9 +1025,10 @@ function loginTemplate(data) {
 
 exports.sendPasswordResetEmail = async (user, resetUrl) => {
   const label = `password-reset-${user._id}`;
+  console.log(
+    `[email] sendPasswordResetEmail called for ${user.email} (${label})`,
+  );
   try {
-    await ensureTransportReady();
-
     const html = baseCard(`
       <div style="background:#dc2626;color:#fff;padding:18px 20px;font-size:18px;font-weight:600;">Password Reset Request</div>
       <div style="padding:20px;">
@@ -1016,10 +1053,17 @@ exports.sendPasswordResetEmail = async (user, resetUrl) => {
       html,
     };
 
+    console.log(
+      `[email] sendPasswordResetEmail: calling sendMailWithRetry for ${user.email}`,
+    );
     const result = await sendMailWithRetry(mail, label);
+    console.log(`[email] sendPasswordResetEmail result:`, result);
     return result;
   } catch (err) {
-    console.error(`[emailService] ${label} failed:`, err.message);
+    console.error(
+      `[email] sendPasswordResetEmail ${label} crashed:`,
+      err.message,
+    );
     return { success: false, error: err.message };
   }
 };
