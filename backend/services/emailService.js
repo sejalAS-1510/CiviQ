@@ -218,7 +218,7 @@ function initializeTransporter() {
   console.log(`[email] initializeTransporter: provider=${emailProvider}`);
 
   // ----------------------------
-  // SENDGRID (kept optional)
+  // SENDGRID (optional)
   // ----------------------------
   if (emailProvider === "sendgrid") {
     transporter = createSendGridClient();
@@ -227,7 +227,7 @@ function initializeTransporter() {
   }
 
   // ----------------------------
-  // BREVO SMTP MODE (PRIMARY FIX)
+  // BREVO SMTP MODE (FIXED & STABLE)
   // ----------------------------
   if (emailProvider === "brevo") {
     const emailUser = readEnv("EMAIL_USER");
@@ -254,17 +254,18 @@ function initializeTransporter() {
       host: "smtp-relay.brevo.com",
       port: 587,
       secure: false, // STARTTLS
+
       auth: {
         user: emailUser,
         pass: emailPass,
       },
 
       // ----------------------------
-      // IMPORTANT STABILITY FIX
+      // STABILITY FIX (IMPORTANT)
       // ----------------------------
-      connectionTimeout: 60000,
-      greetingTimeout: 60000,
-      socketTimeout: 60000,
+      connectionTimeout: 20000,
+      greetingTimeout: 20000,
+      socketTimeout: 20000,
 
       requireTLS: true,
 
@@ -272,14 +273,21 @@ function initializeTransporter() {
         rejectUnauthorized: false,
       },
 
-      logger: true,
-      debug: true,
+      // helps Render debugging (safe to remove later)
+      logger: false,
+      debug: false,
     });
 
     console.log(`[email] SMTP transport created successfully`);
     return transporter;
   }
 
+  // ----------------------------
+  // fallback
+  // ----------------------------
+  console.warn(`[email] No valid email provider configured`);
+  return null;
+}
   // ----------------------------
   // DEFAULT FALLBACK (SAFETY)
   // ----------------------------
