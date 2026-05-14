@@ -206,6 +206,7 @@ async function withRetry(taskFn, options) {
 
 function initializeTransporter() {
   if (transporter) return transporter;
+
   if (emailServiceDisabledReason) {
     console.debug(
       `[email] Transporter already disabled: ${emailServiceDisabledReason}`,
@@ -216,26 +217,28 @@ function initializeTransporter() {
   const emailProvider = resolveEmailProvider();
   console.log(`[email] initializeTransporter: provider=${emailProvider}`);
 
+  // ❌ REMOVE sendgrid path usage (you are not using it anymore safely)
   if (emailProvider === "sendgrid") {
     transporter = createSendGridClient();
     console.log(`[email] initializeTransporter: sendgrid client created`);
     return transporter;
   }
 
-  const gmailUser = readEnv("GMAIL_USER") || readEnv("EMAIL_USER");
-  const gmailPassword =
+  // ✅ BREVO / SMTP MODE (FIXED)
+  const emailUser = readEnv("EMAIL_USER");
+  const emailPass =
+    readEnv("EMAIL_PASS") ||
     readEnv("GMAIL_APP_PASSWORD") ||
-    readEnv("GMAIL_PASS") ||
-    readEnv("EMAIL_PASS");
+    readEnv("GMAIL_PASS");
 
   console.log(
-    `[email] Gmail config: user=${gmailUser || "(missing)"}, password=${gmailPassword ? "(set)" : "(missing)"}`,
+    `[email] SMTP config: user=${emailUser || "(missing)"}, pass=${emailPass ? "set" : "missing"}`,
   );
 
-  if (!gmailUser || !gmailPassword) {
+  if (!emailUser || !emailPass) {
     if (!emailConfigWarned) {
       console.warn(
-        "[email] Service not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD (or GMAIL_PASS) in backend/.env",
+        "[email] SMTP not configured. Set EMAIL_USER and EMAIL_PASS in Render env",
       );
       emailConfigWarned = true;
     }
@@ -243,24 +246,22 @@ function initializeTransporter() {
     return null;
   }
 
-  console.log(`[email] Creating gmail transport for ${gmailUser}`);
+  console.log(`[email] Creating SMTP (Brevo) transport`);
 
   transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp-relay.brevo.com",
+    port: 587,
+    secure: false,
     auth: {
-      user: gmailUser,
-      pass: gmailPassword,
+      user: emailUser,
+      pass: emailPass,
     },
-
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-    tls: {
-      rejectUnauthorized: false,
-    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
   });
 
-  console.log(`[email] Gmail transport created successfully`);
+  console.log(`[email] SMTP transport created successfully`);
 
   return transporter;
 }
