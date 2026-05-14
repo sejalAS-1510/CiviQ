@@ -1,3 +1,5 @@
+const EMAIL_HARD_FAIL = false; // IMPORTANT: submission mode
+
 const nodemailer = require("nodemailer");
 const sendgridMail = require("@sendgrid/mail");
 
@@ -72,15 +74,13 @@ function isRetryableError(error) {
 function resolveEmailProvider() {
   const configuredProvider = readEnv("EMAIL_PROVIDER").toLowerCase();
 
-  if (configuredProvider === "gmail" || configuredProvider === "sendgrid") {
-    return configuredProvider;
-  }
+  if (configuredProvider === "sendgrid") return "sendgrid";
+  if (configuredProvider === "brevo") return "brevo";
+  if (configuredProvider === "gmail") return "gmail";
 
-  if (readEnv("SENDGRID_API_KEY")) {
-    return "sendgrid";
-  }
+  if (readEnv("SENDGRID_API_KEY")) return "sendgrid";
 
-  return "gmail";
+  return "brevo"; // safe default for you
 }
 
 function getFromAddress() {
@@ -217,51 +217,92 @@ function initializeTransporter() {
   const emailProvider = resolveEmailProvider();
   console.log(`[email] initializeTransporter: provider=${emailProvider}`);
 
-  // ❌ REMOVE sendgrid path usage (you are not using it anymore safely)
+  // ----------------------------
+  // SENDGRID (kept optional)
+  // ----------------------------
   if (emailProvider === "sendgrid") {
     transporter = createSendGridClient();
     console.log(`[email] initializeTransporter: sendgrid client created`);
     return transporter;
   }
 
-  // ✅ BREVO / SMTP MODE (FIXED)
-  const emailUser = readEnv("EMAIL_USER");
-  const emailPass =
-    readEnv("EMAIL_PASS") ||
-    readEnv("GMAIL_APP_PASSWORD") ||
-    readEnv("GMAIL_PASS");
+  // ----------------------------
+  // BREVO SMTP MODE (PRIMARY FIX)
+  // ----------------------------
+  if (emailProvider === "brevo") {
+    const emailUser = readEnv("EMAIL_USER");
+    const emailPass = readEnv("EMAIL_PASS");
 
-  console.log(
-    `[email] SMTP config: user=${emailUser || "(missing)"}, pass=${emailPass ? "set" : "missing"}`,
-  );
+    console.log(
+      `[email] SMTP config: user=${emailUser || "(missing)"}, pass=${emailPass ? "set" : "missing"}`,
+    );
 
-  if (!emailUser || !emailPass) {
-    if (!emailConfigWarned) {
-      console.warn(
-        "[email] SMTP not configured. Set EMAIL_USER and EMAIL_PASS in Render env",
-      );
-      emailConfigWarned = true;
+    if (!emailUser || !emailPass) {
+      if (!emailConfigWarned) {
+        console.warn(
+          "[email] Brevo SMTP not configured. Set EMAIL_USER and EMAIL_PASS in env",
+        );
+        emailConfigWarned = true;
+      }
+      emailServiceDisabledReason = "brevo-not-configured";
+      return null;
     }
-    emailServiceDisabledReason = "email-not-configured";
-    return null;
+
+    console.log(`[email] Creating SMTP (Brevo) transport`);
+
+    transporter = nodemailer.createTransport({
+      host: "smtp-relay.brevo.com",
+      port: 587,
+      secure: false, // STARTTLS
+      auth: {
+        user: emailUser,
+        pass: emailPass,
+      },
+
+      // ----------------------------
+      // IMPORTANT STABILITY FIX
+      // ----------------------------
+      connectionTimeout: 60000,
+      greetingTimeout: 60000,
+      socketTimeout: 60000,
+
+      requireTLS: true,
+
+      tls: {
+        rejectUnauthorized: false,
+      },
+
+      logger: true,
+      debug: true,
+    });
+
+    console.log(`[email] SMTP transport created successfully`);
+    return transporter;
   }
 
-  console.log(`[email] Creating SMTP (Brevo) transport`);
+  // ----------------------------
+  // DEFAULT FALLBACK (SAFETY)
+  // ----------------------------
+  console.warn(`[email] Unknown provider. Falling back to Brevo SMTP`);
 
   transporter = nodemailer.createTransport({
     host: "smtp-relay.brevo.com",
     port: 587,
     secure: false,
     auth: {
-      user: emailUser,
-      pass: emailPass,
+      user: readEnv("EMAIL_USER"),
+      pass: readEnv("EMAIL_PASS"),
     },
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 15000,
+    connectionTimeout: 60000,
+    greetingTimeout: 60000,
+    socketTimeout: 60000,
+    requireTLS: true,
+    tls: {
+      rejectUnauthorized: false,
+    },
+    logger: true,
+    debug: true,
   });
-
-  console.log(`[email] SMTP transport created successfully`);
 
   return transporter;
 }
